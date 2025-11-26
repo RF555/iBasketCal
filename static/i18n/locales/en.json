@@ -1,0 +1,85 @@
+{
+  "page": {
+    "title": "Israeli Basketball Calendar"
+  },
+  "header": {
+    "title": "Israeli Basketball Calendar",
+    "subtitle": "Create subscribable calendars for Israeli basketball games"
+  },
+  "lang": {
+    "switcher": "עברית"
+  },
+  "filters": {
+    "title": "Select Filters",
+    "season": {
+      "label": "Season:",
+      "placeholder": "Select season...",
+      "selectFirst": "Select a season first..."
+    },
+    "league": {
+      "label": "League:",
+      "placeholder": "Select league...",
+      "selectFirst": "Select a season first...",
+      "loading": "Loading leagues..."
+    },
+    "team": {
+      "label": "Team:",
+      "selectFirst": "Select a league first...",
+      "loading": "Loading teams...",
+      "hint": "Optional - leave empty for all teams in league",
+      "allTeams": "All Teams",
+      "allTeamsError": "All Teams (loading error)",
+      "noData": "No data available for this league"
+    }
+  },
+  "preview": {
+    "title": "Preview",
+    "loading": "Loading matches...",
+    "selectFilters": "Select season and league to view matches",
+    "noMatches": "No match data available for this league. Click \"Refresh Data\" to load new data.",
+    "showingCount": "Showing {{shown}} of {{total}} matches"
+  },
+  "match": {
+    "versus": "vs",
+    "status": {
+      "closed": "Final",
+      "live": "Live",
+      "upcoming": "Upcoming"
+    }
+  },
+  "calendar": {
+    "title": "Calendar URL",
+    "copy": "Copy",
+    "addGoogle": "Add to Google Calendar",
+    "download": "Download ICS File"
+  },
+  "instructions": {
+    "title": "Subscription Instructions",
+    "step1": "Copy the calendar URL",
+    "step2": "Open your calendar app (Google Calendar, Apple Calendar, etc.)",
+    "step3": "Look for \"Add calendar from URL\" or \"Subscribe to calendar\"",
+    "step4": "Paste the URL",
+    "step5": "The calendar will automatically update with new games"
+  },
+  "footer": {
+    "checking": "Checking cache status...",
+    "refresh": "Refresh Data",
+    "refreshing": "Refreshing...",
+    "dataSource": "Data from ibasketball.co.il",
+    "lastUpdated": "Last updated:",
+    "noCache": "No cached data",
+    "staleData": "Stale data",
+    "freshData": "Data is fresh"
+  },
+  "toast": {
+    "copied": "URL copied!",
+    "refreshInProgress": "Refresh already in progress, please wait...",
+    "refreshStarted": "Data refresh started. This may take 30-60 seconds...",
+    "refreshSuccess": "Data updated!",
+    "loadError": "Error loading data",
+    "leagueError": "Error loading leagues",
+    "matchError": "Error loading matches",
+    "refreshError": "Error refreshing data",
+    "noMatchData": "No match data available for this league. Try refreshing the data."
+  }
+}

@@ -6,10 +6,10 @@ A web application that provides subscribable ICS calendars for Israeli basketbal
 
 - **Subscribable Calendars** - Add to Google Calendar, Apple Calendar, Outlook, or any calendar app
 - **Auto-Updates** - Calendars refresh automatically with new games and scores
-- **Hebrew Support** - Full Hebrew text support for team names and venues
+- **Bilingual Interface** - Full Hebrew and English support with language auto-detection
 - **Flexible Filtering** - Filter by season, league, and team with cascading dropdowns
 - **Game Details** - Includes venues, final scores, and competition info
-- **Web Interface** - Easy-to-use Hebrew RTL interface for generating calendar URLs
+- **RTL/LTR Support** - Automatic direction switching based on selected language
 
 ## How It Works
 
@@ -171,9 +171,14 @@ iBasketCal/
 │       ├── data_service.py        # Data access layer
 │       └── calendar_service.py    # ICS calendar generation
 ├── static/
-│   ├── index.html                 # Hebrew RTL web UI
-│   ├── style.css                  # Styling
-│   └── app.js                     # Frontend JavaScript
+│   ├── index.html                 # Bilingual web UI
+│   ├── style.css                  # Styling with RTL/LTR support
+│   ├── app.js                     # Frontend JavaScript
+│   └── i18n/                      # Internationalization
+│       ├── i18n-config.js         # i18next configuration
+│       └── locales/
+│           ├── he.json            # Hebrew translations
+│           └── en.json            # English translations
 ├── cache/                         # Scraped data cache
 ├── tests/
 │   └── __init__.py

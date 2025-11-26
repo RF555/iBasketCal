@@ -19,6 +19,9 @@ let state = {
     }
 };
 
+// Store last cache info for re-render on language change
+let lastCacheInfo = null;
+
 // DOM Elements
 const elements = {
     // Filter steps
@@ -45,11 +48,45 @@ const elements = {
     toast: document.getElementById('toast')
 };
 
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize with i18n
+document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize i18next first
+    await initI18next();
+    updateDocumentDirection(getCurrentLanguage());
+    translatePage();
+
+    // Now initialize the app
     loadInitialData();
     setupEventListeners();
     updateStepStates();
+});
+
+// Listen for language changes to update dynamic content
+window.addEventListener('languageChanged', () => {
+    // Re-render dynamic content with new language
+    populateSeasons();
+
+    // Update dropdowns placeholder text based on state
+    if (!state.filters.season) {
+        elements.leagueSelect.innerHTML = `<option value="">${t('filters.league.selectFirst')}</option>`;
+        elements.teamSelect.innerHTML = `<option value="">${t('filters.team.selectFirst')}</option>`;
+    } else if (!state.filters.league) {
+        elements.teamSelect.innerHTML = `<option value="">${t('filters.team.selectFirst')}</option>`;
+    }
+
+    // Re-render matches if we have any
+    if (state.matches.length > 0) {
+        displayMatches(state.matches);
+    } else if (state.filters.season && state.filters.league) {
+        elements.matchesPreview.innerHTML = `<p class="loading">${t('preview.loading')}</p>`;
+    } else {
+        elements.matchesPreview.innerHTML = `<p class="loading">${t('preview.selectFilters')}</p>`;
+    }
+
+    // Update cache status
+    if (lastCacheInfo) {
+        updateCacheStatus(lastCacheInfo);
+    }
 });
 
 // Load initial data
@@ -61,17 +98,18 @@ async function loadInitialData() {
         ]);
 
         state.seasons = seasons || [];
+        lastCacheInfo = cacheInfo;
         populateSeasons();
         updateCacheStatus(cacheInfo);
         updateCalendarUrl();
 
         // Show empty state
-        elements.matchesPreview.innerHTML = '<p class="loading">בחר עונה וליגה להצגת משחקים</p>';
+        elements.matchesPreview.innerHTML = `<p class="loading">${t('preview.selectFilters')}</p>`;
         elements.matchesCount.textContent = '';
 
     } catch (error) {
         console.error('Error loading initial data:', error);
-        showToast('שגיאה בטעינת נתונים', 'error');
+        showToast(t('toast.loadError'), 'error');
     }
 }
 
@@ -86,7 +124,7 @@ async function fetchAPI(endpoint) {
 
 // Populate seasons dropdown
 function populateSeasons() {
-    elements.seasonSelect.innerHTML = '<option value="">בחר עונה...</option>';
+    elements.seasonSelect.innerHTML = `<option value="">${t('filters.season.placeholder')}</option>`;
 
     // Sort seasons by name descending (newest first)
     const sortedSeasons = [...state.seasons].sort((a, b) =>
@@ -99,11 +137,16 @@ function populateSeasons() {
         option.textContent = season.name;
         elements.seasonSelect.appendChild(option);
     });
+
+    // Restore selection if we had one
+    if (state.filters.season) {
+        elements.seasonSelect.value = state.filters.season;
+    }
 }
 
 // Populate leagues dropdown based on selected season
 async function populateLeagues(seasonId) {
-    elements.leagueSelect.innerHTML = '<option value="">טוען ליגות...</option>';
+    elements.leagueSelect.innerHTML = `<option value="">${t('filters.league.loading')}</option>`;
     elements.leagueSelect.disabled = true;
 
     try {
@@ -114,7 +157,7 @@ async function populateLeagues(seasonId) {
         }
 
         const competitions = state.competitions[seasonId];
-        elements.leagueSelect.innerHTML = '<option value="">בחר ליגה...</option>';
+        elements.leagueSelect.innerHTML = `<option value="">${t('filters.league.placeholder')}</option>`;
 
         // Flatten competitions and their groups, then sort
         const leagueOptions = [];
@@ -149,14 +192,14 @@ async function populateLeagues(seasonId) {
 
     } catch (error) {
         console.error('Error loading leagues:', error);
-        elements.leagueSelect.innerHTML = '<option value="">שגיאה בטעינת ליגות</option>';
-        showToast('שגיאה בטעינת ליגות', 'error');
+        elements.leagueSelect.innerHTML = `<option value="">${t('toast.leagueError')}</option>`;
+        showToast(t('toast.leagueError'), 'error');
     }
 }
 
 // Populate teams dropdown based on selected league
 async function populateTeams(groupId, competitionName) {
-    elements.teamSelect.innerHTML = '<option value="">טוען קבוצות...</option>';
+    elements.teamSelect.innerHTML = `<option value="">${t('filters.team.loading')}</option>`;
     elements.teamSelect.disabled = true;
 
     try {
@@ -185,13 +228,13 @@ async function populateTeams(groupId, competitionName) {
 
         if (teams.length === 0) {
             // No teams found - data not available for this league
-            elements.teamSelect.innerHTML = '<option value="">אין נתונים זמינים לליגה זו</option>';
+            elements.teamSelect.innerHTML = `<option value="">${t('filters.team.noData')}</option>`;
             elements.teamSelect.disabled = true;
-            showToast('אין נתוני משחקים זמינים לליגה זו. נסה לרענן את הנתונים.', 'error');
+            showToast(t('toast.noMatchData'), 'error');
             return;
         }
 
-        elements.teamSelect.innerHTML = '<option value="">כל הקבוצות</option>';
+        elements.teamSelect.innerHTML = `<option value="">${t('filters.team.allTeams')}</option>`;
 
         teams.forEach(team => {
             const option = document.createElement('option');
@@ -205,7 +248,7 @@ async function populateTeams(groupId, competitionName) {
 
     } catch (error) {
         console.error('Error loading teams:', error);
-        elements.teamSelect.innerHTML = '<option value="">כל הקבוצות (שגיאה בטעינה)</option>';
+        elements.teamSelect.innerHTML = `<option value="">${t('filters.team.allTeamsError')}</option>`;
         elements.teamSelect.disabled = false;  // Still allow "all teams" selection
     }
 }
@@ -239,9 +282,9 @@ async function onSeasonChange() {
     state.filters.teamName = '';
 
     // Reset league and team dropdowns
-    elements.leagueSelect.innerHTML = '<option value="">בחר עונה תחילה...</option>';
+    elements.leagueSelect.innerHTML = `<option value="">${t('filters.league.selectFirst')}</option>`;
     elements.leagueSelect.disabled = true;
-    elements.teamSelect.innerHTML = '<option value="">בחר ליגה תחילה...</option>';
+    elements.teamSelect.innerHTML = `<option value="">${t('filters.team.selectFirst')}</option>`;
     elements.teamSelect.disabled = true;
 
     if (seasonId) {
@@ -264,7 +307,7 @@ async function onLeagueChange() {
     // Reset team filter
     state.filters.team = '';
     state.filters.teamName = '';
-    elements.teamSelect.innerHTML = '<option value="">בחר ליגה תחילה...</option>';
+    elements.teamSelect.innerHTML = `<option value="">${t('filters.team.selectFirst')}</option>`;
     elements.teamSelect.disabled = true;
 
     if (groupId && state.filters.leagueName) {
@@ -329,12 +372,12 @@ function updateStepStates() {
 async function loadMatches() {
     // Require at least season and league selection
     if (!state.filters.season || !state.filters.league) {
-        elements.matchesPreview.innerHTML = '<p class="loading">בחר עונה וליגה להצגת משחקים</p>';
+        elements.matchesPreview.innerHTML = `<p class="loading">${t('preview.selectFilters')}</p>`;
         elements.matchesCount.textContent = '';
         return;
     }
 
-    elements.matchesPreview.innerHTML = '<p class="loading">טוען משחקים...</p>';
+    elements.matchesPreview.innerHTML = `<p class="loading">${t('preview.loading')}</p>`;
 
     try {
         const params = new URLSearchParams();
@@ -353,14 +396,14 @@ async function loadMatches() {
         displayMatches(state.matches);
     } catch (error) {
         console.error('Error loading matches:', error);
-        elements.matchesPreview.innerHTML = '<p class="loading">שגיאה בטעינת משחקים</p>';
+        elements.matchesPreview.innerHTML = `<p class="loading">${t('toast.matchError')}</p>`;
     }
 }
 
 // Display matches in preview
 function displayMatches(matches) {
     if (matches.length === 0) {
-        elements.matchesPreview.innerHTML = '<p class="loading">אין נתוני משחקים זמינים לליגה זו. לחץ על "רענן נתונים" לטעינת נתונים חדשים.</p>';
+        elements.matchesPreview.innerHTML = `<p class="loading">${t('preview.noMatches')}</p>`;
         elements.matchesCount.textContent = '';
         return;
     }
@@ -372,7 +415,7 @@ function displayMatches(matches) {
         const status = getStatusDisplay(match);
         const location = match.court?.place || '';
 
-        let teams = `${home} נגד ${away}`;
+        let teams = `${home} ${t('match.versus')} ${away}`;
         if (match.status === 'CLOSED' && match.score?.totals) {
             const homeScore = getScore(match, 'home');
             const awayScore = getScore(match, 'away');
@@ -390,7 +433,10 @@ function displayMatches(matches) {
         `;
     }).join('');
 
-    elements.matchesCount.textContent = `מציג ${Math.min(matches.length, 100)} מתוך ${matches.length} משחקים`;
+    elements.matchesCount.textContent = t('preview.showingCount', {
+        shown: Math.min(matches.length, 100),
+        total: matches.length
+    });
 }
 
 // Get score for a team
@@ -405,11 +451,11 @@ function getScore(match, side) {
 function getStatusDisplay(match) {
     switch (match.status) {
         case 'CLOSED':
-            return { text: 'הסתיים', class: 'closed' };
+            return { text: t('match.status.closed'), class: 'closed' };
         case 'LIVE':
-            return { text: 'עכשיו', class: 'live' };
+            return { text: t('match.status.live'), class: 'live' };
         default:
-            return { text: 'צפוי', class: 'upcoming' };
+            return { text: t('match.status.upcoming'), class: 'upcoming' };
     }
 }
 
@@ -417,7 +463,7 @@ function getStatusDisplay(match) {
 function formatDate(dateStr) {
     if (!dateStr) return '';
     const date = new Date(dateStr);
-    return date.toLocaleDateString('he-IL', {
+    return date.toLocaleDateString(getLocale(), {
         weekday: 'short',
         day: 'numeric',
         month: 'short',
@@ -452,19 +498,19 @@ function updateCalendarUrl() {
 async function copyCalendarUrl() {
     try {
         await navigator.clipboard.writeText(elements.calendarUrl.value);
-        showToast('הכתובת הועתקה!', 'success');
+        showToast(t('toast.copied'), 'success');
     } catch (error) {
         // Fallback for older browsers
         elements.calendarUrl.select();
         document.execCommand('copy');
-        showToast('הכתובת הועתקה!', 'success');
+        showToast(t('toast.copied'), 'success');
     }
 }
 
 // Refresh data with async polling
 async function refreshData() {
     elements.refreshBtn.disabled = true;
-    elements.refreshBtn.textContent = 'מרענן...';
+    elements.refreshBtn.textContent = t('footer.refreshing');
 
     try {
         // Start the background refresh
@@ -472,15 +518,15 @@ async function refreshData() {
         const result = await response.json();
 
         if (result.status === 'in_progress') {
-            showToast('רענון כבר מתבצע, אנא המתן...', 'info');
+            showToast(t('toast.refreshInProgress'), 'info');
         } else if (result.status === 'started') {
-            showToast('רענון נתונים התחיל. הפעולה עשויה להימשך 30-60 שניות...', 'info');
+            showToast(t('toast.refreshStarted'), 'info');
         }
 
         // Poll for completion
         await pollRefreshStatus();
 
-        showToast('הנתונים עודכנו!', 'success');
+        showToast(t('toast.refreshSuccess'), 'success');
 
         // Clear cached data and reload
         state.competitions = {};
@@ -489,10 +535,10 @@ async function refreshData() {
         await loadInitialData();
     } catch (error) {
         console.error('Error refreshing data:', error);
-        showToast('שגיאה ברענון נתונים', 'error');
+        showToast(t('toast.refreshError'), 'error');
     } finally {
         elements.refreshBtn.disabled = false;
-        elements.refreshBtn.textContent = 'רענן נתונים';
+        elements.refreshBtn.textContent = t('footer.refresh');
     }
 }
 
@@ -518,7 +564,7 @@ async function pollRefreshStatus() {
 
             // Update button text with progress indicator
             const dots = '.'.repeat((attempts % 3) + 1);
-            elements.refreshBtn.textContent = `מרענן${dots}`;
+            elements.refreshBtn.textContent = t('footer.refreshing').replace('...', '') + dots;
 
             attempts++;
         } catch (error) {
@@ -538,24 +584,26 @@ function sleep(ms) {
 
 // Update cache status display
 function updateCacheStatus(cacheInfo) {
+    lastCacheInfo = cacheInfo;
+
     if (!cacheInfo || !cacheInfo.exists) {
-        elements.cacheStatus.textContent = 'אין נתונים במטמון';
+        elements.cacheStatus.textContent = t('footer.noCache');
         elements.cacheStatus.style.backgroundColor = '#ffebee';
         elements.lastUpdate.textContent = '-';
         return;
     }
 
     if (cacheInfo.stale) {
-        elements.cacheStatus.textContent = 'נתונים ישנים';
+        elements.cacheStatus.textContent = t('footer.staleData');
         elements.cacheStatus.style.backgroundColor = '#fff3e0';
     } else {
-        elements.cacheStatus.textContent = 'נתונים עדכניים';
+        elements.cacheStatus.textContent = t('footer.freshData');
         elements.cacheStatus.style.backgroundColor = '#e8f5e9';
     }
 
     if (cacheInfo.last_updated) {
         const date = new Date(cacheInfo.last_updated);
-        elements.lastUpdate.textContent = date.toLocaleString('he-IL');
+        elements.lastUpdate.textContent = date.toLocaleString(getLocale());
     }
 }
 

@@ -1,0 +1,85 @@
+{
+  "page": {
+    "title": "לוח שנה כדורסל ישראלי"
+  },
+  "header": {
+    "title": "לוח שנה כדורסל ישראלי",
+    "subtitle": "יצירת לוח שנה להרשמה למשחקי כדורסל ישראלי"
+  },
+  "lang": {
+    "switcher": "English"
+  },
+  "filters": {
+    "title": "בחר סינון",
+    "season": {
+      "label": "עונה:",
+      "placeholder": "בחר עונה...",
+      "selectFirst": "בחר עונה תחילה..."
+    },
+    "league": {
+      "label": "ליגה:",
+      "placeholder": "בחר ליגה...",
+      "selectFirst": "בחר עונה תחילה...",
+      "loading": "טוען ליגות..."
+    },
+    "team": {
+      "label": "קבוצה:",
+      "selectFirst": "בחר ליגה תחילה...",
+      "loading": "טוען קבוצות...",
+      "hint": "אופציונלי - השאר ריק לכל הקבוצות בליגה",
+      "allTeams": "כל הקבוצות",
+      "allTeamsError": "כל הקבוצות (שגיאה בטעינה)",
+      "noData": "אין נתונים זמינים לליגה זו"
+    }
+  },
+  "preview": {
+    "title": "תצוגה מקדימה",
+    "loading": "טוען משחקים...",
+    "selectFilters": "בחר עונה וליגה להצגת משחקים",
+    "noMatches": "אין נתוני משחקים זמינים לליגה זו. לחץ על \"רענן נתונים\" לטעינת נתונים חדשים.",
+    "showingCount": "מציג {{shown}} מתוך {{total}} משחקים"
+  },
+  "match": {
+    "versus": "נגד",
+    "status": {
+      "closed": "הסתיים",
+      "live": "עכשיו",
+      "upcoming": "צפוי"
+    }
+  },
+  "calendar": {
+    "title": "כתובת לוח השנה",
+    "copy": "העתק",
+    "addGoogle": "הוסף ל-Google Calendar",
+    "download": "הורד קובץ ICS"
+  },
+  "instructions": {
+    "title": "הוראות הרשמה",
+    "step1": "העתק את כתובת לוח השנה",
+    "step2": "פתח את אפליקציית לוח השנה שלך (Google Calendar, Apple Calendar וכו')",
+    "step3": "חפש אפשרות \"הוסף לוח שנה מכתובת URL\" או \"הרשם ללוח שנה\"",
+    "step4": "הדבק את הכתובת",
+    "step5": "לוח השנה יתעדכן אוטומטית עם משחקים חדשים"
+  },
+  "footer": {
+    "checking": "בודק מצב מטמון...",
+    "refresh": "רענן נתונים",
+    "refreshing": "מרענן...",
+    "dataSource": "נתונים מ-ibasketball.co.il",
+    "lastUpdated": "עודכן לאחרונה:",
+    "noCache": "אין נתונים במטמון",
+    "staleData": "נתונים ישנים",
+    "freshData": "נתונים עדכניים"
+  },
+  "toast": {
+    "copied": "הכתובת הועתקה!",
+    "refreshInProgress": "רענון כבר מתבצע, אנא המתן...",
+    "refreshStarted": "רענון נתונים התחיל. הפעולה עשויה להימשך 30-60 שניות...",
+    "refreshSuccess": "הנתונים עודכנו!",
+    "loadError": "שגיאה בטעינת נתונים",
+    "leagueError": "שגיאה בטעינת ליגות",
+    "matchError": "שגיאה בטעינת משחקים",
+    "refreshError": "שגיאה ברענון נתונים",
+    "noMatchData": "אין נתוני משחקים זמינים לליגה זו. נסה לרענן את הנתונים."
+  }
+}

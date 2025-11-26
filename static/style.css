@@ -38,6 +38,34 @@ header {
     text-align: center;
     padding: 30px 0;
     margin-bottom: 20px;
+    position: relative;
+}
+
+/* Language Switcher */
+.lang-switcher {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+[dir="ltr"] .lang-switcher {
+    left: auto;
+    right: 0;
+}
+
+.btn-lang {
+    background-color: transparent;
+    border: 2px solid var(--primary-color);
+    color: var(--primary-color);
+    padding: 8px 16px;
+    font-size: 0.9rem;
+}
+
+.btn-lang:hover {
+    background-color: var(--primary-color);
+    color: white;
+    transform: none;
+    box-shadow: none;
 }
 
 header h1 {
@@ -370,6 +398,12 @@ section h2 {
 
 .instructions ol {
     padding-right: 25px;
+    padding-left: 0;
+}
+
+[dir="ltr"] .instructions ol {
+    padding-right: 0;
+    padding-left: 25px;
 }
 
 .instructions li {
