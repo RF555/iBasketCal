@@ -3,6 +3,8 @@ NBN23 API Scraper using Playwright for token extraction and direct API calls.
 
 Extracts the authorization token by intercepting widget API requests,
 then uses the token to directly call all API endpoints for comprehensive data.
+Saves data directly to SQLite database instead of JSON file.
+Includes automatic token refresh on 401 errors.
 """
 
 from playwright.sync_api import sync_playwright
@@ -10,8 +12,11 @@ import requests
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union, Dict, List, Any, TYPE_CHECKING
 import time
+
+if TYPE_CHECKING:
+    from ..storage.database import Database
 
 
 class NBN23Scraper:
@@ -21,19 +26,25 @@ class NBN23Scraper:
     Process:
     1. Load widget page to extract the authorization token
     2. Use token to directly call API endpoints for all data
-    3. Cache results locally
+    3. Save results directly to SQLite database
     """
 
     WIDGET_URL = "https://ibasketball.co.il/swish/"
     API_BASE = "https://api.swish.nbn23.com"
     ORIGIN = "https://ibasketball.co.il"
 
-    def __init__(self, headless: bool = True, cache_dir: str = "cache"):
+    def __init__(
+        self,
+        headless: bool = True,
+        cache_dir: str = "cache",
+        database: Optional["Database"] = None
+    ):
         self.headless = headless
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
         self.token: Optional[str] = None
         self.session: Optional[requests.Session] = None
+        self.db = database
 
     def _extract_token(self) -> str:
         """
@@ -51,8 +62,6 @@ class NBN23Scraper:
 
         try:
             with sync_playwright() as p:
-                # Use headless="new" for better headless compatibility
-                # Add args to make headless mode less detectable
                 browser = p.chromium.launch(
                     headless=self.headless,
                     args=[
@@ -61,7 +70,6 @@ class NBN23Scraper:
                         '--no-sandbox'
                     ]
                 )
-                # Create context with realistic browser settings
                 context = browser.new_context(
                     viewport={'width': 1280, 'height': 900},
                     user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -78,13 +86,11 @@ class NBN23Scraper:
                         print(f"[+] Token captured: {token[:20]}...")
                     route.continue_()
 
-                # Intercept API requests to capture the auth token
                 page.route("**/api.swish.nbn23.com/**", handle_route)
 
                 try:
                     print(f"[*] Loading {self.WIDGET_URL}...")
                     page.goto(self.WIDGET_URL, wait_until='domcontentloaded', timeout=45000)
-                    # Wait for widget to initialize and make API calls
                     page.wait_for_timeout(10000)
                 except Exception as e:
                     page_error = str(e)
@@ -107,7 +113,7 @@ class NBN23Scraper:
         self.token = token
         return token
 
-    def _init_session(self):
+    def _init_session(self) -> None:
         """Initialize HTTP session with auth headers."""
         if not self.token:
             self._extract_token()
@@ -119,16 +125,22 @@ class NBN23Scraper:
             "Accept": "application/json"
         })
 
-    def _api_request(self, endpoint: str, params: dict = None) -> dict:
+    def _api_request(
+        self,
+        endpoint: str,
+        params: Optional[Dict] = None,
+        retry: bool = True
+    ) -> Union[Dict, List]:
         """
-        Make authenticated API request.
+        Make authenticated API request with automatic token refresh on 401.
 
         Args:
             endpoint: API endpoint (e.g., 'seasons', 'competitions')
             params: Query parameters
+            retry: Whether to retry on 401 (set False to prevent infinite loop)
 
         Returns:
-            JSON response data
+            JSON response data (dict or list)
         """
         if not self.session:
             self._init_session()
@@ -136,21 +148,29 @@ class NBN23Scraper:
         url = f"{self.API_BASE}/{endpoint}"
         try:
             response = self.session.get(url, params=params, timeout=30)
+
+            # Handle token expiration
+            if response.status_code == 401 and retry:
+                print("[!] Token expired (401), re-extracting...")
+                self.token = None
+                self.session = None
+                self._init_session()
+                return self._api_request(endpoint, params, retry=False)
+
             response.raise_for_status()
             return response.json()
+
         except requests.RequestException as e:
             print(f"[!] API request failed for {endpoint}: {e}")
+            # Return empty structure based on expected type
             return {} if endpoint in ['calendar', 'standings'] else []
 
-    def scrape(self, interact: bool = True) -> dict:
+    def scrape(self) -> Dict[str, Any]:
         """
-        Main scraping method. Fetches all data via direct API calls.
-
-        Args:
-            interact: Ignored (kept for backward compatibility)
+        Main scraping method. Fetches all data and saves to SQLite.
 
         Returns:
-            Organized data dictionary with seasons, competitions, calendars, standings
+            Summary dict with counts and timing
 
         Raises:
             RuntimeError: If token extraction fails
@@ -158,26 +178,32 @@ class NBN23Scraper:
         print("[*] Starting data refresh...")
         start_time = time.time()
 
-        # Step 1: Extract token - let the error propagate so caller knows it failed
+        # Step 1: Extract token
         self._extract_token()
-
-        # Step 2: Initialize session
         self._init_session()
 
-        # Step 3: Fetch seasons
+        # Step 2: Fetch and save seasons
+        print("[*] Fetching seasons...")
         seasons = self._api_request("seasons")
+        if self.db:
+            self.db.save_seasons(seasons)
+        print(f"    [+] Saved {len(seasons)} seasons")
 
-        # Step 4: Fetch competitions for each season
-        competitions = {}
+        # Step 3: Fetch and save competitions for each season
+        all_groups = []
         for season in seasons:
             season_id = season.get('_id')
-            if season_id:
-                comps = self._api_request("competitions", {"seasonId": season_id})
-                competitions[season_id] = comps
+            if not season_id:
+                continue
 
-        # Step 5: Collect all group IDs
-        all_groups = []
-        for season_id, comps in competitions.items():
+            season_name = season.get('name', season_id)
+            print(f"[*] Fetching competitions for {season_name}...")
+            comps = self._api_request("competitions", {"seasonId": season_id})
+
+            if self.db:
+                self.db.save_competitions(season_id, comps)
+
+            # Collect group info for calendar fetching
             for comp in comps:
                 for group in comp.get('groups', []):
                     group_id = group.get('id')
@@ -185,86 +211,80 @@ class NBN23Scraper:
                         all_groups.append({
                             'id': group_id,
                             'season_id': season_id,
+                            'season_name': season_name,
                             'competition_name': comp.get('name', ''),
                             'group_name': group.get('name', '')
                         })
 
-        # Step 6: Fetch calendars and standings for groups
-        # Focus on current season (first one) to avoid too many requests
-        current_season_id = seasons[0]['_id'] if seasons else None
-        current_season_groups = [g for g in all_groups if g['season_id'] == current_season_id]
+        print(f"    [+] Found {len(all_groups)} total groups")
 
-        calendars = {}
-        standings = {}
-
-        for i, group_info in enumerate(current_season_groups):
+        # Step 4: Fetch calendars and standings for all groups
+        total_matches = 0
+        for i, group_info in enumerate(all_groups):
             group_id = group_info['id']
-            comp_name = group_info['competition_name']
+            if not group_id:
+                continue
 
             # Progress indicator
             if (i + 1) % 50 == 0 or i == 0:
-                print(f"  [*] Processing group {i + 1}/{len(current_season_groups)}...")
+                print(f"    [*] Processing group {i + 1}/{len(all_groups)}...")
 
             # Fetch calendar
             calendar = self._api_request("calendar", {"groupId": group_id})
-            if calendar:
-                calendars[group_id] = calendar
-                # Count matches
-                match_count = sum(
-                    len(r.get('matches', []))
-                    for r in calendar.get('rounds', [])
+            if calendar and self.db:
+                count = self.db.save_matches(
+                    group_id=group_id,
+                    calendar_data=calendar,
+                    competition_name=group_info['competition_name'],
+                    group_name=group_info['group_name'],
+                    season_id=group_info['season_id']
                 )
+                total_matches += count
 
             # Fetch standings
-            standing = self._api_request("standings", {"groupId": group_id})
-            if standing:
-                standings[group_id] = standing
+            standings = self._api_request("standings", {"groupId": group_id})
+            if standings and self.db:
+                self.db.save_standings(group_id, standings)
 
             # Small delay to be nice to the API
-            time.sleep(0.1)
+            time.sleep(0.05)
 
-        # Build final data structure
-        data = {
-            'seasons': seasons,
-            'competitions': competitions,
-            'calendars': calendars,
-            'standings': standings,
-            'scraped_at': datetime.now(timezone.utc).isoformat()
-        }
-
-        # Save to cache
-        self._save_cache(data)
+        # Step 5: Update scrape timestamp
+        if self.db:
+            self.db.update_scrape_timestamp()
 
         elapsed = time.time() - start_time
         print(f"[+] Data refresh complete in {elapsed:.1f}s")
+        print(f"    Seasons: {len(seasons)}")
+        print(f"    Groups: {len(all_groups)}")
+        print(f"    Matches: {total_matches}")
 
-        return data
+        return {
+            'seasons': len(seasons),
+            'groups': len(all_groups),
+            'matches': total_matches,
+            'elapsed': elapsed
+        }
 
-    def _save_cache(self, data: dict) -> None:
-        """Save scraped data to cache file."""
-        cache_file = self.cache_dir / 'nbn23_data.json'
-        with open(cache_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"[*] Cache saved to {cache_file}")
+    # =========================================================================
+    # LEGACY METHODS (for backward compatibility during migration)
+    # =========================================================================
 
-    def load_cache(self) -> Optional[dict]:
-        """Load data from cache."""
+    def load_cache(self) -> Optional[Dict]:
+        """
+        Load data from JSON cache (legacy).
+        Returns None if database is being used.
+        """
+        if self.db:
+            # Using database, return None to trigger DB read
+            return None
+
         cache_file = self.cache_dir / 'nbn23_data.json'
         if not cache_file.exists():
             return None
 
         with open(cache_file, 'r', encoding='utf-8') as f:
             return json.load(f)
-
-    def _empty_data(self) -> dict:
-        """Return empty data structure."""
-        return {
-            'seasons': [],
-            'competitions': {},
-            'calendars': {},
-            'standings': {},
-            'scraped_at': datetime.now(timezone.utc).isoformat()
-        }
 
 
 # CLI entry point
@@ -281,11 +301,23 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    scraper = NBN23Scraper(headless=args.headless, cache_dir=args.cache_dir)
-    data = scraper.scrape()
+    # Import database for CLI usage
+    from ..storage.database import get_database
+
+    db = get_database(f"{args.cache_dir}/basketball.db")
+    scraper = NBN23Scraper(
+        headless=args.headless,
+        cache_dir=args.cache_dir,
+        database=db
+    )
+
+    result = scraper.scrape()
 
     print("\n=== Summary ===")
-    print(f"Seasons: {len(data.get('seasons', []))}")
-    print(f"Competition sets: {len(data.get('competitions', {}))}")
-    print(f"Calendars: {len(data.get('calendars', {}))}")
-    print(f"Standings: {len(data.get('standings', {}))}")
+    print(f"Seasons: {result['seasons']}")
+    print(f"Groups: {result['groups']}")
+    print(f"Matches: {result['matches']}")
+    print(f"Time: {result['elapsed']:.1f}s")
+
+    print("\n=== Database Stats ===")
+    print(db.get_cache_info())

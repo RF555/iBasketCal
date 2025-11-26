@@ -102,6 +102,17 @@ ehthumbs.db
 *.log
 *.local
 
+# SQLite database files
+*.db
+*.db-wal
+*.db-shm
+
+# Cache directory data (keep directory with .gitkeep)
+cache/*.json
+cache/*.db
+cache/*.db-wal
+cache/*.db-shm
+
 # Docker
 .docker/
 

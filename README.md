@@ -15,8 +15,8 @@ A web application that provides subscribable ICS calendars for Israeli basketbal
 
 ```
 ┌─────────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Playwright Scraper │────▶│   Local Cache    │────▶│   FastAPI App   │
-│  (Background Job)   │     │   (JSON/SQLite)  │     │   (ICS Server)  │
+│  Playwright Scraper │────▶│  SQLite Database │────▶│   FastAPI App   │
+│  (Token Extraction) │     │  (Indexed Cache) │     │   (ICS Server)  │
 └─────────────────────┘     └──────────────────┘     └─────────────────┘
          │                                                    │
          ▼                                                    ▼
@@ -30,8 +30,8 @@ The NBN23 API requires browser-based authentication, so we use Playwright to:
 1. Load the ibasketball.co.il widget page
 2. Intercept API requests to capture the authorization token
 3. Use the token to directly call the API for all seasons, competitions, and calendars
-4. Cache the data locally (23,000+ matches across 283 competition groups)
-5. Serve ICS calendars from cached data
+4. Store data in SQLite database with indexed queries (108,000+ matches across 1,500+ groups)
+5. Serve ICS calendars with fast filtered queries
 
 ## Quick Start
 
@@ -166,10 +166,13 @@ iBasketCal/
 │   │   ├── __init__.py
 │   │   ├── nbn23_scraper.py       # Playwright-based scraper
 │   │   └── scheduler.py           # Background refresh scheduler
-│   └── services/
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── data_service.py        # Data access layer
+│   │   └── calendar_service.py    # ICS calendar generation
+│   └── storage/
 │       ├── __init__.py
-│       ├── data_service.py        # Data access layer
-│       └── calendar_service.py    # ICS calendar generation
+│       └── database.py            # SQLite database module
 ├── static/
 │   ├── index.html                 # Bilingual web UI
 │   ├── style.css                  # Styling with RTL/LTR support
@@ -179,7 +182,8 @@ iBasketCal/
 │       └── locales/
 │           ├── he.json            # Hebrew translations
 │           └── en.json            # English translations
-├── cache/                         # Scraped data cache
+├── cache/                         # SQLite database storage
+│   └── basketball.db              # Main database file
 ├── tests/
 │   └── __init__.py
 ├── Dockerfile
@@ -204,9 +208,10 @@ python -m src.scraper.nbn23_scraper
 The scraper:
 1. Loads the widget page to capture the API authorization token
 2. Uses the token to directly call the NBN23 API
-3. Fetches all seasons, competitions, and calendars
-4. Takes approximately 2 minutes to complete
-5. Captures 23,000+ matches across 283 competition groups
+3. Fetches all seasons, competitions, and calendars (4 seasons of historical data)
+4. Stores data in SQLite database with indexed queries
+5. Takes approximately 7-8 minutes to complete full scrape
+6. Captures 108,000+ matches across 1,500+ competition groups
 
 ### Background Scheduler
 
@@ -288,12 +293,26 @@ The scraper captures data for all Israeli basketball competitions including:
 **"Playwright browser not found"**
 - Run `playwright install chromium` to install the browser.
 
+**"Token expired (401)"**
+- The scraper automatically retries with a fresh token when this happens.
+- If persistent, the widget page authentication may have changed.
+
+### Database Issues
+
+**"Database not found"**
+- Run the scraper to populate the database: `python -m src.scraper.nbn23_scraper`
+- Check that `cache/basketball.db` exists.
+
+**"Database locked"**
+- SQLite uses WAL mode for concurrent access, but heavy writes may cause brief locks.
+- Restart the application if issues persist.
+
 ### Calendar Issues
 
 **"Calendar not updating"**
 - Calendar apps typically refresh subscribed calendars every few hours.
 - Force refresh in your calendar app settings.
-- Check `/api/cache-info` to see when data was last updated.
+- Check `/health` endpoint to see database stats and last update time.
 
 **"Hebrew text not displaying correctly"**
 - Ensure your calendar app supports UTF-8.
