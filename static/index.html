@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>לוח משחקי כדורסל ישראלי</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>לוח משחקי כדורסל ישראלי</h1>
+            <p class="subtitle">צור יומן מותאם אישית למשחקי כדורסל</p>
+        </header>
+
+        <main>
+            <section class="card">
+                <h2>בחר עונה</h2>
+                <select id="season-select" class="form-control">
+                    <option value="">טוען עונות...</option>
+                </select>
+            </section>
+
+            <section class="card">
+                <h2>סנן לפי ליגה</h2>
+                <div id="competitions-container" class="checkbox-grid">
+                    <p class="placeholder">בחר עונה כדי לראות ליגות</p>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>סנן לפי קבוצה</h2>
+                <input type="text" id="team-filter" class="form-control"
+                       placeholder="הקלד שם קבוצה (לדוגמה: מכבי, הפועל)">
+                <div id="team-suggestions" class="suggestions"></div>
+            </section>
+
+            <section class="card">
+                <h2>טווח תאריכים</h2>
+                <div class="range-container">
+                    <input type="range" id="days-range" min="0" max="4" value="2" class="range-slider">
+                    <div class="range-labels">
+                        <span>7 ימים</span>
+                        <span>14 ימים</span>
+                        <span>30 ימים</span>
+                        <span>90 ימים</span>
+                        <span>הכל</span>
+                    </div>
+                    <p id="days-value" class="range-value">30 ימים</p>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>סטטוס משחקים</h2>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="status" value="all" checked>
+                        <span>כל המשחקים</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="status" value="upcoming">
+                        <span>משחקים עתידיים</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="status" value="finished">
+                        <span>משחקים שהסתיימו</span>
+                    </label>
+                </div>
+            </section>
+
+            <section class="card result-card">
+                <h2>כתובת היומן שלך</h2>
+                <div class="url-container">
+                    <input type="text" id="calendar-url" class="form-control url-input" readonly
+                           placeholder="הכתובת תופיע כאן">
+                    <button id="copy-btn" class="btn btn-secondary" title="העתק">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                    </button>
+                </div>
+                <p id="copy-feedback" class="feedback"></p>
+
+                <div class="action-buttons">
+                    <button id="generate-btn" class="btn btn-primary">צור כתובת יומן</button>
+                    <a id="google-calendar-link" href="#" class="btn btn-google" target="_blank">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/>
+                        </svg>
+                        הוסף ל-Google Calendar
+                    </a>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>נתונים מסופקים על ידי <a href="https://ibasketball.co.il" target="_blank">iBasketball.co.il</a></p>
+            <p>הפרויקט הוא קוד פתוח</p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
