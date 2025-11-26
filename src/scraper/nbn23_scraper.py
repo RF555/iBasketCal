@@ -226,7 +226,7 @@ class NBN23Scraper:
                 continue
 
             # Progress indicator
-            if (i + 1) % 50 == 0 or i == 0:
+            if (i + 1) % 100 == 0 or i == 0:
                 print(f"    [*] Processing group {i + 1}/{len(all_groups)}...")
 
             # Fetch calendar
@@ -265,26 +265,6 @@ class NBN23Scraper:
             'matches': total_matches,
             'elapsed': elapsed
         }
-
-    # =========================================================================
-    # LEGACY METHODS (for backward compatibility during migration)
-    # =========================================================================
-
-    def load_cache(self) -> Optional[Dict]:
-        """
-        Load data from JSON cache (legacy).
-        Returns None if database is being used.
-        """
-        if self.db:
-            # Using database, return None to trigger DB read
-            return None
-
-        cache_file = self.cache_dir / 'nbn23_data.json'
-        if not cache_file.exists():
-            return None
-
-        with open(cache_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
 
 
 # CLI entry point

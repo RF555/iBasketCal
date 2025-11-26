@@ -10,6 +10,8 @@ A web application that provides subscribable ICS calendars for Israeli basketbal
 - **Flexible Filtering** - Filter by season, league, and team with cascading dropdowns
 - **Game Details** - Includes venues, final scores, and competition info
 - **RTL/LTR Support** - Automatic direction switching based on selected language
+- **Robust Error Handling** - Request timeouts, rate limiting feedback, and graceful error recovery
+- **RFC 5545 Compliant** - ICS calendars with proper line folding for Hebrew text compatibility
 
 ## How It Works
 
@@ -163,6 +165,7 @@ iBasketCal/
 ├── src/
 │   ├── __init__.py
 │   ├── main.py                    # FastAPI application
+│   ├── types.py                   # TypedDict definitions
 │   ├── scraper/
 │   │   ├── __init__.py
 │   │   ├── nbn23_scraper.py       # Playwright-based scraper
@@ -318,6 +321,24 @@ The scraper captures data for all Israeli basketball competitions including:
 **"Hebrew text not displaying correctly"**
 - Ensure your calendar app supports UTF-8.
 - The ICS file uses proper encoding for Hebrew text.
+
+## Technical Details
+
+### Storage
+- **SQLite Database** - Efficient indexed storage (~180MB for all data)
+- **WAL Mode** - Allows concurrent reads during writes
+- **Automatic refresh** - Data refreshes every 30 minutes (background scheduler)
+
+### Data
+- ~108,000 matches across all seasons
+- ~1,500 competition groups
+- Full history from 2022/2023 season
+- 4 seasons of data
+
+### Performance
+- Indexed queries for fast filtering by season, competition, and team
+- Rate limiting on refresh endpoint (5-minute cooldown)
+- Frontend request timeouts (30 seconds)
 
 ## License
 

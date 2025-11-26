@@ -72,12 +72,15 @@
   "toast": {
     "copied": "URL copied!",
     "refreshInProgress": "Refresh already in progress, please wait...",
-    "refreshStarted": "Data refresh started. This may take 30-60 seconds...",
+    "refreshStarted": "Data refresh started. This may take 1-2 minutes...",
     "refreshSuccess": "Data updated!",
     "loadError": "Error loading data",
     "leagueError": "Error loading leagues",
     "matchError": "Error loading matches",
     "refreshError": "Error refreshing data",
-    "noMatchData": "No match data available for this league. Try refreshing the data."
+    "noMatchData": "No match data available for this league. Try refreshing the data.",
+    "timeout": "Request timed out. Please try again.",
+    "rateLimited": "Please wait {{seconds}} seconds before refreshing again.",
+    "refreshTimeout": "Refresh is taking too long. Please check back later."
   }
 }

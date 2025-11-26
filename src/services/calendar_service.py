@@ -5,7 +5,7 @@ Creates RFC 5545 compliant iCalendar files for Israeli basketball games.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import hashlib
 
 
@@ -14,9 +14,11 @@ class CalendarService:
     Generates ICS calendar files from match data.
     """
 
+    MAX_LINE_OCTETS = 75  # RFC 5545 line length limit
+
     def generate_ics(
         self,
-        matches: list,
+        matches: List[Dict[str, Any]],
         calendar_name: str = "Israeli Basketball"
     ) -> str:
         """
@@ -48,9 +50,11 @@ class CalendarService:
 
         lines.append("END:VCALENDAR")
 
-        return "\r\n".join(lines)
+        # Fold long lines and join with CRLF
+        folded_lines = [self._fold_line(line) for line in lines]
+        return "\r\n".join(folded_lines)
 
-    def _get_timezone_component(self) -> list:
+    def _get_timezone_component(self) -> List[str]:
         """Generate VTIMEZONE component for Israel timezone."""
         return [
             "BEGIN:VTIMEZONE",
@@ -72,7 +76,7 @@ class CalendarService:
             "END:VTIMEZONE",
         ]
 
-    def _match_to_vevent(self, match: dict) -> list:
+    def _match_to_vevent(self, match: Dict[str, Any]) -> List[str]:
         """Convert a match to VEVENT lines."""
         match_id = match.get('id', 'unknown')
 
@@ -191,12 +195,48 @@ class CalendarService:
 
         return text
 
+    def _fold_line(self, line: str) -> str:
+        """
+        Fold a line that exceeds 75 octets per RFC 5545.
+
+        Lines are folded by inserting CRLF followed by a single
+        whitespace character (space).
+
+        Args:
+            line: Input line (may contain Unicode/Hebrew)
+
+        Returns:
+            Folded line(s) joined by CRLF + space
+        """
+        # Check if folding is needed (count UTF-8 bytes, not chars)
+        if len(line.encode('utf-8')) <= self.MAX_LINE_OCTETS:
+            return line
+
+        result = []
+        current = ""
+
+        for char in line:
+            # Check if adding this char would exceed limit
+            test = current + char
+            if len(test.encode('utf-8')) > self.MAX_LINE_OCTETS:
+                # Start a new line
+                result.append(current)
+                current = " " + char  # Continuation starts with space
+            else:
+                current += char
+
+        # Don't forget the last segment
+        if current:
+            result.append(current)
+
+        return "\r\n".join(result)
+
     def filter_matches_by_date_range(
         self,
-        matches: list,
+        matches: List[Dict[str, Any]],
         days_ahead: Optional[int] = None,
         days_behind: Optional[int] = None
-    ) -> list:
+    ) -> List[Dict[str, Any]]:
         """
         Filter matches to a specific date range.
 

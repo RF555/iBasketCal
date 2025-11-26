@@ -112,13 +112,31 @@ async function loadInitialData() {
     }
 }
 
-// API helper
-async function fetchAPI(endpoint) {
-    const response = await fetch(API_BASE + endpoint);
-    if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+// API helper with timeout support
+async function fetchAPI(endpoint, options = {}) {
+    const timeout = options.timeout || 30000; // Default 30 second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+        const response = await fetch(API_BASE + endpoint, {
+            ...options,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+        return response.json();
+    } catch (error) {
+        clearTimeout(timeoutId);
+
+        if (error.name === 'AbortError') {
+            throw new Error(t('toast.timeout'));
+        }
+        throw error;
     }
-    return response.json();
 }
 
 // Populate seasons dropdown
@@ -506,20 +524,40 @@ async function copyCalendarUrl() {
     }
 }
 
-// Refresh data with async polling
+// Refresh data with rate limiting support
 async function refreshData() {
     elements.refreshBtn.disabled = true;
     elements.refreshBtn.textContent = t('footer.refreshing');
 
     try {
         // Start the background refresh
-        const response = await fetch(API_BASE + '/api/refresh', { method: 'POST' });
+        const response = await fetch(API_BASE + '/api/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
         const result = await response.json();
 
-        if (result.status === 'in_progress') {
-            showToast(t('toast.refreshInProgress'), 'info');
-        } else if (result.status === 'started') {
-            showToast(t('toast.refreshStarted'), 'info');
+        // Handle different response statuses
+        switch (result.status) {
+            case 'rate_limited':
+                showToast(
+                    t('toast.rateLimited', { seconds: result.retry_after }),
+                    'warning'
+                );
+                elements.refreshBtn.disabled = false;
+                elements.refreshBtn.textContent = t('footer.refresh');
+                return; // Don't poll, just return
+
+            case 'in_progress':
+                showToast(t('toast.refreshInProgress'), 'info');
+                break;
+
+            case 'started':
+                showToast(t('toast.refreshStarted'), 'info');
+                break;
+
+            default:
+                console.warn('Unknown refresh status:', result.status);
         }
 
         // Poll for completion
@@ -532,6 +570,7 @@ async function refreshData() {
         state.teams = {};
 
         await loadInitialData();
+
     } catch (error) {
         console.error('Error refreshing data:', error);
         showToast(t('toast.refreshError'), 'error');
@@ -541,16 +580,23 @@ async function refreshData() {
     }
 }
 
-// Poll refresh status until complete
+// Poll refresh status until complete with timeout handling
 async function pollRefreshStatus() {
-    const maxAttempts = 18; // Max 3 minutes (18 * 10 seconds)
+    const maxAttempts = 30; // Max 10 minutes (18 * 20 seconds)
     let attempts = 0;
 
     while (attempts < maxAttempts) {
-        await sleep(10000); // Wait 10 seconds between polls
+        await sleep(20000); // Wait 20 seconds between polls
 
         try {
-            const response = await fetch(API_BASE + '/api/refresh-status');
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+            const response = await fetch(API_BASE + '/api/refresh-status', {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
             const status = await response.json();
 
             if (!status.is_scraping) {
@@ -558,7 +604,7 @@ async function pollRefreshStatus() {
                 if (status.last_error) {
                     throw new Error(status.last_error);
                 }
-                return;
+                return; // Success!
             }
 
             // Update button text with progress indicator
@@ -566,14 +612,19 @@ async function pollRefreshStatus() {
             elements.refreshBtn.textContent = t('footer.refreshing').replace('...', '') + dots;
 
             attempts++;
+
         } catch (error) {
-            console.error('Error checking refresh status:', error);
-            throw error; // Re-throw to show error to user
+            if (error.name === 'AbortError') {
+                console.warn('Poll request timed out, continuing...');
+                attempts++;
+                continue;
+            }
+            throw error;
         }
     }
 
     // Timeout after max attempts
-    throw new Error('Refresh timeout');
+    throw new Error(t('toast.refreshTimeout'));
 }
 
 // Sleep helper
