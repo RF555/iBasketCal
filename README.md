@@ -103,9 +103,10 @@ The preview shows all matches for the season with dates, scores, and venue addre
 | `GET /api/competitions/{season_id}` | Competitions for a season |
 | `GET /api/matches` | List matches with filters |
 | `GET /api/teams` | List all teams |
-| `GET /api/cache-info` | Cache status |
-| `POST /api/refresh` | Force data refresh |
-| `GET /health` | Health check |
+| `GET /api/cache-info` | Cache status (includes database size, scraping state) |
+| `POST /api/refresh` | Force data refresh (rate limited: 5 min cooldown) |
+| `GET /api/refresh-status` | Check refresh progress and errors |
+| `GET /health` | Health check with database stats |
 | `GET /docs` | API documentation (Swagger) |
 
 ### Calendar URL Parameters

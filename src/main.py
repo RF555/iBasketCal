@@ -5,6 +5,7 @@ Provides REST API and ICS calendar endpoints for Israeli basketball games.
 """
 
 from contextlib import asynccontextmanager
+from datetime import datetime
 from fastapi import FastAPI, Query, Response, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -12,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from pathlib import Path
 import os
+import threading
 
 from .services.data_service import DataService
 from .services.calendar_service import CalendarService
@@ -19,6 +21,59 @@ from .services.calendar_service import CalendarService
 # Initialize services
 data_service = DataService()
 calendar_service = CalendarService()
+
+
+# ============================================================================
+# RATE LIMITING
+# ============================================================================
+
+class RateLimiter:
+    """Simple rate limiter for refresh endpoint."""
+
+    def __init__(self, cooldown_seconds: int = 300):
+        """
+        Initialize rate limiter.
+
+        Args:
+            cooldown_seconds: Minimum seconds between allowed requests (default 5 min)
+        """
+        self.cooldown_seconds = cooldown_seconds
+        self._last_request: Optional[datetime] = None
+        self._lock = threading.Lock()
+
+    def try_acquire(self) -> tuple[bool, int]:
+        """
+        Try to acquire rate limit.
+
+        Returns:
+            Tuple of (allowed: bool, wait_seconds: int)
+            - If allowed, wait_seconds is 0
+            - If not allowed, wait_seconds is how long to wait
+        """
+        with self._lock:
+            now = datetime.now()
+
+            if self._last_request is None:
+                self._last_request = now
+                return True, 0
+
+            elapsed = (now - self._last_request).total_seconds()
+
+            if elapsed >= self.cooldown_seconds:
+                self._last_request = now
+                return True, 0
+
+            wait_seconds = int(self.cooldown_seconds - elapsed)
+            return False, wait_seconds
+
+    def reset(self) -> None:
+        """Reset the rate limiter (for testing)."""
+        with self._lock:
+            self._last_request = None
+
+
+# Rate limiter: 5 minute cooldown between refreshes
+refresh_rate_limiter = RateLimiter(cooldown_seconds=300)
 
 
 @asynccontextmanager
@@ -228,27 +283,53 @@ async def get_calendar(
 async def get_cache_info():
     """Get information about the data cache."""
     try:
-        return data_service.get_cache_info()
+        info = data_service.get_cache_info()
+        info['is_scraping'] = data_service.is_scraping()
+        info['database_size_mb'] = round(
+            data_service.db.get_database_size() / (1024 * 1024), 2
+        )
+        return info
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/refresh")
 async def refresh_data():
-    """Start a background refresh of cached data."""
-    try:
-        print("[API] /api/refresh called")
-        if data_service.is_scraping():
-            print("[API] Scrape already in progress")
-            return {"status": "in_progress", "message": "Refresh already in progress"}
+    """
+    Start a background refresh of cached data.
 
-        print("[API] Starting refresh_async...")
+    Rate limited to once per 5 minutes to prevent abuse.
+    """
+    try:
+        # Check if already scraping
+        if data_service.is_scraping():
+            return {
+                "status": "in_progress",
+                "message": "Refresh already in progress"
+            }
+
+        # Check rate limit
+        allowed, wait_seconds = refresh_rate_limiter.try_acquire()
+        if not allowed:
+            return {
+                "status": "rate_limited",
+                "message": f"Please wait {wait_seconds} seconds before refreshing again",
+                "retry_after": wait_seconds
+            }
+
+        # Start background refresh
         started = data_service.refresh_async()
-        print(f"[API] refresh_async returned: {started}")
         if started:
-            return {"status": "started", "message": "Data refresh started in background. This may take 30-60 seconds."}
+            return {
+                "status": "started",
+                "message": "Data refresh started in background. This may take several minutes."
+            }
         else:
-            return {"status": "in_progress", "message": "Refresh already in progress"}
+            return {
+                "status": "in_progress",
+                "message": "Refresh already in progress"
+            }
+
     except Exception as e:
         print(f"[API] Error in /api/refresh: {e}")
         import traceback
@@ -272,7 +353,10 @@ async def health():
     cache_info = data_service.get_cache_info()
     return {
         "status": "ok",
-        "cache": cache_info
+        "cache": cache_info,
+        "database_size_mb": round(
+            data_service.db.get_database_size() / (1024 * 1024), 2
+        )
     }
 
 
