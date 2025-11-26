@@ -1,0 +1,48 @@
+# Fly.io Configuration
+# https://fly.io
+#
+# Deploy commands:
+#   fly launch --no-deploy    # First time: creates app
+#   fly deploy                # Deploy/update
+#   fly volumes create basketball_data --size 1 --region fra  # Create volume
+#
+# Note: Fly.io free tier includes:
+#   - 3 shared-cpu-1x VMs
+#   - 3GB persistent storage
+#   - 160GB outbound bandwidth
+
+app = "ibasketcal"
+primary_region = "fra"  # Frankfurt (closest to Israel)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+[[http_service.checks]]
+  grace_period = "60s"
+  interval = "30s"
+  timeout = "10s"
+  path = "/health"
+
+[mounts]
+  source = "basketball_data"
+  destination = "/app/cache"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512  # 512MB should be enough
+
+[env]
+  PYTHONUNBUFFERED = "1"

@@ -1,0 +1,18 @@
+# Render Blueprint
+# https://render.com
+# Deploy: Connect GitHub repo, Render auto-detects this file
+
+services:
+  - type: web
+    name: ibasketcal
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter  # $7/mo, or use 'free' (spins down after 15min inactivity)
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    disk:
+      name: basketball-data
+      mountPath: /app/cache
+      sizeGB: 1  # 1GB is enough for ~20MB database

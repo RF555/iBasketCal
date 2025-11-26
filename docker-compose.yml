@@ -1,31 +1,31 @@
 # Israeli Basketball Calendar - Docker Compose
-version: '3.8'
+# Usage:
+#   Development: docker compose up --build
+#   Production:  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: "3.9"
 
 services:
-  web:
-    build: .
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ibasketcal
     ports:
       - "8000:8000"
     volumes:
-      - ./cache:/app/cache
+      # Persist SQLite database between restarts
+      - basketball_data:/app/cache
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
 
-  # Optional: Background scraper service
-  scraper:
-    build: .
-    command: python -m src.scraper.scheduler
-    volumes:
-      - ./cache:/app/cache
-    environment:
-      - PYTHONUNBUFFERED=1
-    restart: unless-stopped
-    depends_on:
-      - web
+volumes:
+  basketball_data:
+    name: ibasketcal_data
