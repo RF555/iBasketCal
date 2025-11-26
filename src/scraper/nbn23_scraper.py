@@ -85,7 +85,6 @@ class NBN23Scraper:
                     print(f"[*] Loading {self.WIDGET_URL}...")
                     page.goto(self.WIDGET_URL, wait_until='domcontentloaded', timeout=45000)
                     # Wait for widget to initialize and make API calls
-                    print("[*] Waiting for widget to initialize...")
                     page.wait_for_timeout(10000)
                 except Exception as e:
                     page_error = str(e)
@@ -156,7 +155,7 @@ class NBN23Scraper:
         Raises:
             RuntimeError: If token extraction fails
         """
-        print(f"[*] Starting scrape at {datetime.now()}")
+        print("[*] Starting data refresh...")
         start_time = time.time()
 
         # Step 1: Extract token - let the error propagate so caller knows it failed
@@ -166,19 +165,15 @@ class NBN23Scraper:
         self._init_session()
 
         # Step 3: Fetch seasons
-        print("[*] Fetching seasons...")
         seasons = self._api_request("seasons")
-        print(f"[+] Found {len(seasons)} seasons")
 
         # Step 4: Fetch competitions for each season
-        print("[*] Fetching competitions...")
         competitions = {}
         for season in seasons:
             season_id = season.get('_id')
             if season_id:
                 comps = self._api_request("competitions", {"seasonId": season_id})
                 competitions[season_id] = comps
-                print(f"  [+] Season {season.get('name', season_id)}: {len(comps)} competitions")
 
         # Step 5: Collect all group IDs
         all_groups = []
@@ -194,14 +189,11 @@ class NBN23Scraper:
                             'group_name': group.get('name', '')
                         })
 
-        print(f"[*] Found {len(all_groups)} total groups across all seasons")
-
         # Step 6: Fetch calendars and standings for groups
         # Focus on current season (first one) to avoid too many requests
         current_season_id = seasons[0]['_id'] if seasons else None
         current_season_groups = [g for g in all_groups if g['season_id'] == current_season_id]
 
-        print(f"[*] Fetching calendars for {len(current_season_groups)} groups in current season...")
         calendars = {}
         standings = {}
 
@@ -210,7 +202,7 @@ class NBN23Scraper:
             comp_name = group_info['competition_name']
 
             # Progress indicator
-            if (i + 1) % 10 == 0 or i == 0:
+            if (i + 1) % 50 == 0 or i == 0:
                 print(f"  [*] Processing group {i + 1}/{len(current_season_groups)}...")
 
             # Fetch calendar
@@ -222,8 +214,6 @@ class NBN23Scraper:
                     len(r.get('matches', []))
                     for r in calendar.get('rounds', [])
                 )
-                if match_count > 0:
-                    print(f"  [+] {comp_name}: {match_count} matches")
 
             # Fetch standings
             standing = self._api_request("standings", {"groupId": group_id})
@@ -246,11 +236,7 @@ class NBN23Scraper:
         self._save_cache(data)
 
         elapsed = time.time() - start_time
-        print(f"[*] Scrape complete in {elapsed:.1f}s")
-        print(f"    Seasons: {len(seasons)}")
-        print(f"    Competitions: {sum(len(c) for c in competitions.values())}")
-        print(f"    Calendars: {len(calendars)}")
-        print(f"    Standings: {len(standings)}")
+        print(f"[+] Data refresh complete in {elapsed:.1f}s")
 
         return data
 
