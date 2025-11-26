@@ -1,0 +1,456 @@
+/* Israeli Basketball Calendar - Styles */
+
+:root {
+    --primary-color: #1a5fb4;
+    --primary-dark: #0d47a1;
+    --secondary-color: #ff6f00;
+    --success-color: #2e7d32;
+    --background-color: #f5f5f5;
+    --card-background: #ffffff;
+    --text-color: #212121;
+    --text-secondary: #666666;
+    --border-color: #e0e0e0;
+    --shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+    direction: rtl;
+}
+
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Header */
+header {
+    text-align: center;
+    padding: 30px 0;
+    margin-bottom: 20px;
+}
+
+header h1 {
+    color: var(--primary-color);
+    font-size: 2.2rem;
+    margin-bottom: 10px;
+}
+
+header .subtitle {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+}
+
+/* Sections */
+section {
+    background: var(--card-background);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+}
+
+section h2 {
+    color: var(--primary-color);
+    font-size: 1.3rem;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+/* Filter Steps */
+.filter-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+.filter-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 10px;
+    border: 2px solid var(--border-color);
+    transition: all 0.3s;
+}
+
+.filter-step.active {
+    border-color: var(--primary-color);
+    background-color: #e8f4fd;
+}
+
+.filter-step.completed {
+    border-color: var(--success-color);
+    background-color: #e8f5e9;
+}
+
+.filter-step.disabled {
+    opacity: 0.6;
+}
+
+.step-number {
+    width: 32px;
+    height: 32px;
+    background-color: var(--border-color);
+    color: var(--text-secondary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+    transition: all 0.3s;
+}
+
+.filter-step.active .step-number {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.filter-step.completed .step-number {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.filter-step .filter-group {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.filter-hint {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 5px;
+}
+
+/* Filter Groups */
+.filter-group {
+    margin-bottom: 20px;
+}
+
+.filter-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-color);
+}
+
+.filter-group select,
+.filter-group input[type="text"] {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+    background-color: white;
+}
+
+.filter-group select:disabled {
+    background-color: #f0f0f0;
+    cursor: not-allowed;
+}
+
+.filter-group select:focus,
+.filter-group input[type="text"]:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+/* Slider */
+.slider-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.slider-container input[type="range"] {
+    flex: 1;
+    height: 8px;
+    appearance: none;
+    background: var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.slider-container input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    background: var(--primary-color);
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+#days-value {
+    min-width: 80px;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+/* Checkbox */
+.checkbox-group label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.checkbox-group input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+/* Matches Preview */
+.matches-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.match-item {
+    padding: 12px 15px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.match-item:last-child {
+    border-bottom: none;
+}
+
+.match-item:hover {
+    background-color: #f8f8f8;
+}
+
+.match-teams {
+    font-weight: 600;
+}
+
+.match-meta {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.match-status {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.match-status.closed {
+    background-color: #e8f5e9;
+    color: var(--success-color);
+}
+
+.match-status.live {
+    background-color: #ffebee;
+    color: #c62828;
+}
+
+.match-status.upcoming {
+    background-color: #e3f2fd;
+    color: var(--primary-color);
+}
+
+.matches-count {
+    text-align: center;
+    margin-top: 15px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.loading {
+    text-align: center;
+    padding: 30px;
+    color: var(--text-secondary);
+}
+
+/* Calendar URL Section */
+.url-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.url-container input {
+    flex: 1;
+    padding: 12px 15px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    background-color: #f8f8f8;
+    direction: ltr;
+}
+
+/* Buttons */
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-dark);
+}
+
+.btn-secondary {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #e65100;
+}
+
+.btn-small {
+    padding: 8px 16px;
+    font-size: 0.85rem;
+}
+
+.calendar-actions {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-bottom: 25px;
+}
+
+.calendar-actions .btn {
+    flex: 1;
+    min-width: 200px;
+}
+
+/* Instructions */
+.instructions {
+    background-color: #f8f8f8;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.instructions h3 {
+    color: var(--primary-color);
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+}
+
+.instructions ol {
+    padding-right: 25px;
+}
+
+.instructions li {
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.cache-info {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+
+#cache-status {
+    padding: 5px 12px;
+    background-color: #e8f5e9;
+    border-radius: 15px;
+    font-size: 0.85rem;
+}
+
+/* Toast Notifications */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background-color: #333;
+    color: white;
+    padding: 15px 25px;
+    border-radius: 8px;
+    opacity: 0;
+    transition: all 0.3s;
+    z-index: 1000;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.toast.success {
+    background-color: var(--success-color);
+}
+
+.toast.error {
+    background-color: #c62828;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .container {
+        padding: 10px;
+    }
+
+    header h1 {
+        font-size: 1.6rem;
+    }
+
+    section {
+        padding: 15px;
+    }
+
+    .url-container {
+        flex-direction: column;
+    }
+
+    .calendar-actions {
+        flex-direction: column;
+    }
+
+    .calendar-actions .btn {
+        min-width: auto;
+    }
+}

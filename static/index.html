@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>לוח שנה כדורסל ישראלי</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>לוח שנה כדורסל ישראלי</h1>
+            <p class="subtitle">יצירת לוח שנה להרשמה למשחקי כדורסל ישראלי</p>
+        </header>
+
+        <main>
+            <section class="filters">
+                <h2>בחר סינון</h2>
+
+                <div class="filter-steps">
+                    <div class="filter-step">
+                        <div class="step-number">1</div>
+                        <div class="filter-group">
+                            <label for="season-select">עונה:</label>
+                            <select id="season-select">
+                                <option value="">בחר עונה...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="filter-step" id="league-step">
+                        <div class="step-number">2</div>
+                        <div class="filter-group">
+                            <label for="league-select">ליגה:</label>
+                            <select id="league-select" disabled>
+                                <option value="">בחר עונה תחילה...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="filter-step" id="team-step">
+                        <div class="step-number">3</div>
+                        <div class="filter-group">
+                            <label for="team-select">קבוצה:</label>
+                            <select id="team-select" disabled>
+                                <option value="">בחר ליגה תחילה...</option>
+                            </select>
+                            <p class="filter-hint">אופציונלי - השאר ריק לכל הקבוצות בליגה</p>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <section class="preview">
+                <h2>תצוגה מקדימה</h2>
+                <div id="matches-preview" class="matches-list">
+                    <p class="loading">טוען משחקים...</p>
+                </div>
+                <p id="matches-count" class="matches-count"></p>
+            </section>
+
+            <section class="calendar-url">
+                <h2>כתובת לוח השנה</h2>
+                <div class="url-container">
+                    <input type="text" id="calendar-url" readonly>
+                    <button id="copy-btn" class="btn">העתק</button>
+                </div>
+
+                <div class="calendar-actions">
+                    <a id="google-calendar-link" href="#" class="btn btn-primary" target="_blank">
+                        הוסף ל-Google Calendar
+                    </a>
+                    <a id="download-link" href="#" class="btn btn-secondary" download="basketball.ics">
+                        הורד קובץ ICS
+                    </a>
+                </div>
+
+                <div class="instructions">
+                    <h3>הוראות הרשמה</h3>
+                    <ol>
+                        <li>העתק את כתובת לוח השנה</li>
+                        <li>פתח את אפליקציית לוח השנה שלך (Google Calendar, Apple Calendar וכו')</li>
+                        <li>חפש אפשרות "הוסף לוח שנה מכתובת URL" או "הרשם ללוח שנה"</li>
+                        <li>הדבק את הכתובת</li>
+                        <li>לוח השנה יתעדכן אוטומטית עם משחקים חדשים</li>
+                    </ol>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <div class="cache-info">
+                <span id="cache-status">בודק מצב מטמון...</span>
+                <button id="refresh-btn" class="btn btn-small">רענן נתונים</button>
+            </div>
+            <p>נתונים מ-ibasketball.co.il | עודכן לאחרונה: <span id="last-update">-</span></p>
+        </footer>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
