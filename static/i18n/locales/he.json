@@ -62,14 +62,12 @@
     "step5": "לוח השנה יתעדכן אוטומטית עם משחקים חדשים"
   },
   "footer": {
-    "checking": "בודק מצב מטמון...",
     "refresh": "רענן נתונים",
     "refreshing": "מרענן...",
     "dataSource": "נתונים מ-ibasketball.co.il",
     "lastUpdated": "עודכן לאחרונה:",
-    "noCache": "אין נתונים במטמון",
-    "staleData": "נתונים ישנים",
-    "freshData": "נתונים עדכניים"
+    "noData": "אין נתונים - לחץ רענן",
+    "staleData": "נתונים ישנים - לחץ רענן"
   },
   "toast": {
     "copied": "הכתובת הועתקה!",

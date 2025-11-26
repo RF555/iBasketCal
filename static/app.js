@@ -42,7 +42,6 @@ const elements = {
     downloadLink: document.getElementById('download-link'),
 
     // Footer
-    cacheStatus: document.getElementById('cache-status'),
     lastUpdate: document.getElementById('last-update'),
     refreshBtn: document.getElementById('refresh-btn'),
     toast: document.getElementById('toast')
@@ -585,26 +584,28 @@ function sleep(ms) {
 // Update cache status display
 function updateCacheStatus(cacheInfo) {
     lastCacheInfo = cacheInfo;
+    const labelEl = document.querySelector('.last-updated-label');
+    const timeEl = elements.lastUpdate;
 
     if (!cacheInfo || !cacheInfo.exists) {
-        elements.cacheStatus.textContent = t('footer.noCache');
-        elements.cacheStatus.style.backgroundColor = '#ffebee';
-        elements.lastUpdate.textContent = '-';
+        labelEl.textContent = '';
+        timeEl.textContent = t('footer.noData');
+        timeEl.classList.add('warning');
         return;
     }
 
     if (cacheInfo.stale) {
-        elements.cacheStatus.textContent = t('footer.staleData');
-        elements.cacheStatus.style.backgroundColor = '#fff3e0';
-    } else {
-        elements.cacheStatus.textContent = t('footer.freshData');
-        elements.cacheStatus.style.backgroundColor = '#e8f5e9';
+        labelEl.textContent = '';
+        timeEl.textContent = t('footer.staleData');
+        timeEl.classList.add('warning');
+        return;
     }
 
-    if (cacheInfo.last_updated) {
-        const date = new Date(cacheInfo.last_updated);
-        elements.lastUpdate.textContent = date.toLocaleString(getLocale());
-    }
+    // Fresh data - show last updated time
+    labelEl.textContent = t('footer.lastUpdated');
+    timeEl.classList.remove('warning');
+    const date = new Date(cacheInfo.last_updated);
+    timeEl.textContent = date.toLocaleString(getLocale());
 }
 
 // Show toast notification

@@ -62,14 +62,12 @@
     "step5": "The calendar will automatically update with new games"
   },
   "footer": {
-    "checking": "Checking cache status...",
     "refresh": "Refresh Data",
     "refreshing": "Refreshing...",
     "dataSource": "Data from ibasketball.co.il",
     "lastUpdated": "Last updated:",
-    "noCache": "No cached data",
-    "staleData": "Stale data",
-    "freshData": "Data is fresh"
+    "noData": "No data - click refresh",
+    "staleData": "Stale data - click refresh"
   },
   "toast": {
     "copied": "URL copied!",

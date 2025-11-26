@@ -100,11 +100,12 @@
         </main>
 
         <footer>
-            <div class="cache-info">
-                <span id="cache-status" data-i18n="footer.checking">בודק מצב מטמון...</span>
-                <button id="refresh-btn" class="btn btn-small" data-i18n="footer.refresh">רענן נתונים</button>
+            <div class="last-updated-container">
+                <span class="last-updated-label" data-i18n="footer.lastUpdated">עודכן לאחרונה:</span>
+                <span id="last-update" class="last-updated-time">-</span>
+                <button id="refresh-btn" class="btn btn-refresh" data-i18n="footer.refresh">רענן נתונים</button>
             </div>
-            <p><span data-i18n="footer.dataSource">נתונים מ-ibasketball.co.il</span> | <span data-i18n="footer.lastUpdated">עודכן לאחרונה:</span> <span id="last-update">-</span></p>
+            <p class="data-source" data-i18n="footer.dataSource">נתונים מ-ibasketball.co.il</p>
         </footer>
     </div>
 
