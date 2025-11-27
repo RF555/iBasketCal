@@ -543,7 +543,8 @@ class SupabaseDatabase(DatabaseInterface):
         client = self._get_client()
         total = 0
 
-        for table in ['seasons', 'competitions', 'groups', 'matches', 'teams', 'standings']:
+        # Tables with 'id' primary key
+        for table in ['seasons', 'competitions', 'groups', 'matches', 'teams']:
             count_response = (
                 client.table(table)
                 .select('id', count='exact')
@@ -553,14 +554,26 @@ class SupabaseDatabase(DatabaseInterface):
             # Rough estimate: ~500 bytes per row average
             total += count * 500
 
+        # Standings table has composite key (group_id, team_id), not 'id'
+        standings_response = (
+            client.table('standings')
+            .select('group_id', count='exact')
+            .execute()
+        )
+        standings_count = standings_response.count or 0
+        total += standings_count * 500
+
         return total
 
     def clear_all(self) -> None:
         """Clear all data from database."""
         client = self._get_client()
 
-        # Delete in order to respect foreign keys
-        for table in ['standings', 'matches', 'teams', 'groups', 'competitions', 'seasons']:
+        # Delete standings first (uses composite key, not 'id')
+        client.table('standings').delete().neq('group_id', '').execute()
+
+        # Delete other tables in order to respect foreign keys
+        for table in ['matches', 'teams', 'groups', 'competitions', 'seasons']:
             # Use a filter that matches all rows
             client.table(table).delete().neq('id', '').execute()
 
