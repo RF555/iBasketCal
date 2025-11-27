@@ -82,6 +82,19 @@
                     <a id="google-calendar-link" href="#" class="btn btn-primary" target="_blank" data-i18n="calendar.addGoogle">
                         Add to Google Calendar
                     </a>
+                    <a id="apple-calendar-link" href="#" class="btn btn-primary" data-i18n="calendar.addApple">
+                        Add to Apple Calendar
+                    </a>
+                    <div class="dropdown">
+                        <button class="btn btn-primary dropdown-toggle" id="outlook-dropdown-btn" type="button">
+                            <span data-i18n="calendar.addOutlook">Add to Outlook</span>
+                            <span class="dropdown-arrow">▼</span>
+                        </button>
+                        <div class="dropdown-menu" id="outlook-dropdown-menu">
+                            <a id="outlook-365-link" href="#" target="_blank" data-i18n="calendar.outlook365">Outlook 365 (Work/School)</a>
+                            <a id="outlook-com-link" href="#" target="_blank" data-i18n="calendar.outlookCom">Outlook.com (Personal)</a>
+                        </div>
+                    </div>
                     <a id="download-link" href="#" class="btn btn-secondary" download="basketball.ics" data-i18n="calendar.download">
                         Download ICS File
                     </a>
@@ -90,12 +103,11 @@
                 <div class="instructions">
                     <h3 data-i18n="instructions.title">Subscription Instructions</h3>
                     <ol>
-                        <li data-i18n="instructions.step1">Copy the calendar URL</li>
-                        <li data-i18n="instructions.step2">Open your calendar app (Google Calendar, Apple Calendar, etc.)</li>
-                        <li data-i18n="instructions.step3">Look for "Add calendar from URL" or "Subscribe to calendar"</li>
-                        <li data-i18n="instructions.step4">Paste the URL</li>
-                        <li data-i18n="instructions.step5">The calendar will automatically update with new games</li>
+                        <li data-i18n="instructions.step1">Click your preferred calendar button (Google, Apple, or Outlook)</li>
+                        <li data-i18n="instructions.step2">Confirm the subscription in your calendar app</li>
+                        <li data-i18n="instructions.step3">The calendar will automatically update with new games</li>
                     </ol>
+                    <p class="instructions-note" data-i18n="instructions.note">Note: Sync updates may take up to 24 hours, depending on your calendar app</p>
                 </div>
             </section>
         </main>

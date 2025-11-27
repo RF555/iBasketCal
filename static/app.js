@@ -43,6 +43,12 @@ const elements = {
     calendarUrl: document.getElementById('calendar-url'),
     copyBtn: document.getElementById('copy-btn'),
     googleLink: document.getElementById('google-calendar-link'),
+    appleLink: document.getElementById('apple-calendar-link'),
+    outlookDropdown: document.querySelector('.dropdown'),
+    outlookDropdownBtn: document.getElementById('outlook-dropdown-btn'),
+    outlookDropdownMenu: document.getElementById('outlook-dropdown-menu'),
+    outlook365Link: document.getElementById('outlook-365-link'),
+    outlookComLink: document.getElementById('outlook-com-link'),
     downloadLink: document.getElementById('download-link'),
 
     // Footer
@@ -286,6 +292,28 @@ function setupEventListeners() {
 
     // Refresh button
     elements.refreshBtn.addEventListener('click', refreshData);
+
+    // Outlook dropdown toggle
+    elements.outlookDropdownBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        elements.outlookDropdownMenu.classList.toggle('show');
+        elements.outlookDropdown.classList.toggle('open');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', () => {
+        elements.outlookDropdownMenu.classList.remove('show');
+        elements.outlookDropdown.classList.remove('open');
+    });
+
+    // Prevent dropdown from closing when clicking inside the menu
+    elements.outlookDropdownMenu.addEventListener('click', (e) => {
+        // Allow the links to navigate, but close dropdown after
+        setTimeout(() => {
+            elements.outlookDropdownMenu.classList.remove('show');
+            elements.outlookDropdown.classList.remove('open');
+        }, 100);
+    });
 }
 
 // Season change handler
@@ -510,10 +538,29 @@ function updateCalendarUrl() {
     elements.calendarUrl.value = fullUrl;
     elements.downloadLink.href = `${calendarPath}?${queryString}`;
 
-    // Google Calendar subscribe URL - must use webcal:// protocol
+    // webcal:// protocol URL (used by multiple calendar apps)
     const webcalUrl = fullUrl.replace(/^https?:\/\//, 'webcal://');
+
+    // Google Calendar subscribe URL
     const googleUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcalUrl)}`;
     elements.googleLink.href = googleUrl;
+
+    // Apple Calendar - direct webcal:// link
+    elements.appleLink.href = webcalUrl;
+
+    // Build calendar name for Outlook
+    const calendarNameParts = [t('header.title')];
+    if (state.filters.leagueName) calendarNameParts.push(state.filters.leagueName);
+    if (state.filters.teamName) calendarNameParts.push(state.filters.teamName);
+    const calendarName = calendarNameParts.join(' - ');
+
+    // Outlook 365 (work/school)
+    const outlook365Url = `https://outlook.office.com/calendar/0/addfromweb?url=${encodeURIComponent(webcalUrl)}&name=${encodeURIComponent(calendarName)}`;
+    elements.outlook365Link.href = outlook365Url;
+
+    // Outlook.com (personal)
+    const outlookComUrl = `https://outlook.live.com/calendar/0/addfromweb?url=${encodeURIComponent(webcalUrl)}&name=${encodeURIComponent(calendarName)}`;
+    elements.outlookComLink.href = outlookComUrl;
 }
 
 // Copy calendar URL to clipboard

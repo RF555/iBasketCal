@@ -51,15 +51,18 @@
     "title": "Calendar URL",
     "copy": "Copy",
     "addGoogle": "Add to Google Calendar",
+    "addApple": "Add to Apple Calendar",
+    "addOutlook": "Add to Outlook",
+    "outlook365": "Outlook 365 (Work/School)",
+    "outlookCom": "Outlook.com (Personal)",
     "download": "Download ICS File"
   },
   "instructions": {
     "title": "Subscription Instructions",
-    "step1": "Copy the calendar URL",
-    "step2": "Open your calendar app (Google Calendar, Apple Calendar, etc.)",
-    "step3": "Look for \"Add calendar from URL\" or \"Subscribe to calendar\"",
-    "step4": "Paste the URL",
-    "step5": "The calendar will automatically update with new games"
+    "step1": "Click your preferred calendar button (Google, Apple, or Outlook)",
+    "step2": "Confirm the subscription in your calendar app",
+    "step3": "The calendar will automatically update with new games",
+    "note": "Note: Sync updates may take up to 24 hours, depending on your calendar app"
   },
   "footer": {
     "refresh": "Refresh Data",

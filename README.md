@@ -139,6 +139,8 @@ http://localhost:8000/calendar.ics?competition=National
 
 ### Adding to Calendar Apps
 
+The web interface provides one-click subscription buttons for all major calendar platforms:
+
 #### Google Calendar
 
 **Option 1: Use the "Add to Google Calendar" button** (recommended)
@@ -152,19 +154,37 @@ http://localhost:8000/calendar.ics?competition=National
 4. Paste the calendar URL
 5. Click "Add calendar"
 
-> **Note:** The "Add to Google Calendar" button uses the `webcal://` protocol which Google Calendar requires for direct subscription links.
-
 #### Apple Calendar
+
+**Option 1: Use the "Add to Apple Calendar" button** (recommended)
+- Click the "Add to Apple Calendar" button in the web interface
+- Calendar app will open with a subscription prompt
+- Works on macOS, iPhone, and iPad
+
+**Option 2: Manual subscription**
 1. Open Calendar app
-2. File → New Calendar Subscription
+2. File → New Calendar Subscription (macOS) or Settings → Calendar → Accounts → Add Subscribed Calendar (iOS)
 3. Paste the calendar URL
 4. Click Subscribe
 
-#### Outlook
-1. Open Outlook Calendar
-2. Add calendar → From Internet
+> **Note:** For iCloud sync across devices, subscribe on Mac and select "iCloud" as the location.
+
+#### Microsoft Outlook
+
+**Option 1: Use the "Add to Outlook" dropdown** (recommended)
+- Click the "Add to Outlook" button in the web interface
+- Select either:
+  - **Outlook 365 (Work/School)** - for Office 365 accounts
+  - **Outlook.com (Personal)** - for personal Microsoft accounts
+- Outlook web will open with the subscription pre-configured
+
+**Option 2: Manual subscription**
+1. Open Outlook Calendar (web or desktop)
+2. Add calendar → From Internet / Subscribe from web
 3. Paste the calendar URL
 4. Click Subscribe
+
+> **Note:** Calendar updates may take up to 24 hours to sync, depending on your calendar app's refresh settings.
 
 ## Development
 
