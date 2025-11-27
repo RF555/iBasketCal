@@ -252,6 +252,10 @@ Copy `.env.example` to `.env` and configure:
 PORT=8000
 HOST=0.0.0.0
 
+# Data Directory (for persistent storage)
+# Used by Railway/container deployments to specify volume mount path
+DATA_DIR=/data
+
 # Scraper Settings
 SCRAPER_HEADLESS=true
 
@@ -261,6 +265,26 @@ CACHE_TTL_MINUTES=30
 # Scheduler Settings (in minutes)
 REFRESH_INTERVAL_MINUTES=30
 ```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Server port | `8000` |
+| `DATA_DIR` | Directory for SQLite database | `cache/` (local) or `/app/cache` (container) |
+| `RAILWAY_VOLUME_MOUNT_PATH` | Auto-set by Railway for volume mount | - |
+| `SCRAPER_HEADLESS` | Run browser in headless mode | `true` |
+| `CACHE_TTL_MINUTES` | Cache time-to-live | `30` |
+
+### Railway Deployment
+
+For Railway deployment with persistent storage:
+
+1. **Add a volume** in Railway dashboard
+2. **Set mount path** to `/data`
+3. **Set environment variable**: `DATA_DIR=/data`
+
+The app automatically uses the volume for SQLite database storage, ensuring data persists across deployments.
 
 ## Data Sources
 

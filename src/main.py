@@ -18,8 +18,16 @@ import threading
 from .services.data_service import DataService
 from .services.calendar_service import CalendarService
 
-# Initialize services
-data_service = DataService()
+# Get cache directory from environment variable
+# Priority: DATA_DIR > RAILWAY_VOLUME_MOUNT_PATH > /app/cache (container) > cache (local)
+CACHE_DIR = os.environ.get('DATA_DIR') or os.environ.get('RAILWAY_VOLUME_MOUNT_PATH') or (
+    '/app/cache' if os.path.exists('/app') else 'cache'
+)
+Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
+print(f"[*] Using cache directory: {CACHE_DIR}")
+
+# Initialize services with configured cache directory
+data_service = DataService(cache_dir=CACHE_DIR)
 calendar_service = CalendarService()
 
 
