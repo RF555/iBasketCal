@@ -286,6 +286,8 @@ For Railway deployment with persistent storage:
 
 The app automatically uses the volume for SQLite database storage, ensuring data persists across deployments.
 
+**Important Docker Note:** Playwright browsers must be installed as the runtime user, not as root. The Dockerfile installs browsers after switching to `appuser` to ensure they're accessible at runtime.
+
 ## Data Sources
 
 - **ibasketball.co.il** - Official Israeli Basketball Association website
@@ -320,6 +322,7 @@ The scraper captures data for all Israeli basketball competitions including:
 
 **"Playwright browser not found"**
 - Run `playwright install chromium` to install the browser.
+- In Docker, ensure browsers are installed as the runtime user (after `USER` directive), not as root.
 
 **"Token expired (401)"**
 - The scraper automatically retries with a fresh token when this happens.

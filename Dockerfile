@@ -67,10 +67,6 @@ WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install Playwright browsers
-RUN playwright install chromium \
-    && playwright install-deps chromium 2>/dev/null || true
-
 # Copy application code
 COPY src/ ./src/
 COPY static/ ./static/
@@ -86,6 +82,9 @@ RUN mkdir -p /app/cache /data \
 RUN useradd --create-home --shell /bin/bash appuser \
     && chown -R appuser:appuser /app /data
 USER appuser
+
+# Install Playwright browsers AS the appuser (so they're in /home/appuser/.cache/)
+RUN playwright install chromium
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
