@@ -6,7 +6,7 @@ A web application that provides subscribable ICS calendars for Israeli basketbal
 
 - **Subscribable Calendars** - Add to Google Calendar, Apple Calendar, Outlook, or any calendar app
 - **Auto-Updates** - Calendars refresh automatically with new games and scores
-- **Bilingual Interface** - Full Hebrew and English support with language auto-detection
+- **Bilingual Interface** - Full English and Hebrew support with language auto-detection (English default)
 - **Flexible Filtering** - Filter by season, league, and team with cascading dropdowns
 - **Game Details** - Includes venues, final scores, and competition info
 - **RTL/LTR Support** - Automatic direction switching based on selected language
@@ -116,23 +116,25 @@ The preview shows all matches for the season with dates, scores, and venue addre
 | Parameter | Description | Example |
 |-----------|-------------|---------|
 | `season` | Filter by season ID | `?season=686e1422dd2c672160d5ca4b` |
-| `competition` | Filter by competition name | `?competition=ליגת על` |
-| `team` | Filter by team name (partial match) | `?team=מכבי` |
+| `competition` | Filter by competition name (partial match) | `?competition=Premier` |
+| `team` | Filter by team name (partial match) | `?team=Maccabi` |
+
+> **Note:** Competition and team names in the API are in Hebrew. Use partial matches (e.g., "Maccabi" matches teams containing that text) or copy the exact Hebrew names from the web interface.
 
 ### Example Calendar URLs
 
 ```
 # All games (current season Premier League)
-http://localhost:8000/calendar.ics?season=686e1422dd2c672160d5ca4b&competition=ליגת על
+http://localhost:8000/calendar.ics?season=686e1422dd2c672160d5ca4b&competition=Premier
 
 # Maccabi Tel Aviv games
-http://localhost:8000/calendar.ics?competition=ליגת על&team=מכבי תל אביב
+http://localhost:8000/calendar.ics?competition=Premier&team=Maccabi
 
 # Women's Premier League
-http://localhost:8000/calendar.ics?competition=ליגת על נשים
+http://localhost:8000/calendar.ics?competition=Women
 
 # National League
-http://localhost:8000/calendar.ics?competition=לאומית
+http://localhost:8000/calendar.ics?competition=National
 ```
 
 ### Adding to Calendar Apps
@@ -187,14 +189,14 @@ iBasketCal/
 │       ├── __init__.py
 │       └── database.py            # SQLite database module
 ├── static/
-│   ├── index.html                 # Bilingual web UI
+│   ├── index.html                 # Bilingual web UI (English default)
 │   ├── style.css                  # Styling with RTL/LTR support
 │   ├── app.js                     # Frontend JavaScript
 │   └── i18n/                      # Internationalization
-│       ├── i18n-config.js         # i18next configuration
+│       ├── i18n-config.js         # i18next configuration (English fallback)
 │       └── locales/
-│           ├── he.json            # Hebrew translations
-│           └── en.json            # English translations
+│           ├── en.json            # English translations (default)
+│           └── he.json            # Hebrew translations
 ├── cache/                         # SQLite database storage
 │   └── basketball.db              # Main database file
 ├── tests/
@@ -319,12 +321,14 @@ The app automatically uses the volume for SQLite database storage, ensuring data
 ### Available Competitions
 
 The scraper captures data for all Israeli basketball competitions including:
-- Premier League (ליגת על)
-- National League (לאומית)
+- Premier League (ליגת על / Liga Leumit)
+- National League (לאומית / Leumit)
 - Women's Premier League (ליגת על נשים)
 - State Cup (גביע המדינה)
 - Youth leagues
 - And more...
+
+> **Note:** Competition names are stored in Hebrew in the database. Use partial English matches or the exact Hebrew names when filtering.
 
 ### Known Season IDs
 

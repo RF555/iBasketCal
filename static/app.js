@@ -3,6 +3,10 @@
 
 const API_BASE = '';
 
+// API returns Hebrew group names - this constant represents "Regular" group
+// which is used to filter display names (show just competition name, not "Competition - Regular")
+const API_GROUP_NAME_REGULAR = 'רגילה';
+
 // State
 let state = {
     seasons: [],
@@ -181,7 +185,7 @@ async function populateLeagues(seasonId) {
         competitions.forEach(comp => {
             const groups = comp.groups || [];
             groups.forEach(group => {
-                const displayName = group.name !== comp.name && group.name !== 'רגילה'
+                const displayName = group.name !== comp.name && group.name !== API_GROUP_NAME_REGULAR
                     ? `${comp.name} - ${group.name}`
                     : comp.name;
                 leagueOptions.push({

@@ -234,8 +234,8 @@ async def get_calendar(
 
     Example URLs:
     - /calendar.ics - All games for the season
-    - /calendar.ics?team=מכבי - All games for a team
-    - /calendar.ics?competition=ליגת על - Premier League games
+    - /calendar.ics?team=Maccabi - All games for a team
+    - /calendar.ics?competition=Premier%20League - Premier League games
     """
     try:
         # Get matches with filters

@@ -3,7 +3,7 @@
 
 const I18N_CONFIG = {
     supportedLngs: ['he', 'en'],
-    fallbackLng: 'he',
+    fallbackLng: 'en',
     detection: {
         order: ['localStorage', 'navigator'],
         lookupLocalStorage: 'ibasketcal-lang',
@@ -32,7 +32,7 @@ function t(key, options) {
 
 // Get current language
 function getCurrentLanguage() {
-    return i18next.language || 'he';
+    return i18next.language || 'en';
 }
 
 // Check if current language is RTL

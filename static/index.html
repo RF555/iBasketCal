@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="he" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>לוח שנה כדורסל ישראלי</title>
+    <title>Israeli Basketball Calendar</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="stylesheet" href="/static/style.css">
     <!-- i18next CDN -->
@@ -20,21 +20,21 @@
                     <span data-i18n="lang.switcher">English</span>
                 </button>
             </div>
-            <h1 data-i18n="header.title">לוח שנה כדורסל ישראלי</h1>
-            <p class="subtitle" data-i18n="header.subtitle">יצירת לוח שנה להרשמה למשחקי כדורסל ישראלי</p>
+            <h1 data-i18n="header.title">Israeli Basketball Calendar</h1>
+            <p class="subtitle" data-i18n="header.subtitle">Create subscribable calendars for Israeli basketball games</p>
         </header>
 
         <main>
             <section class="filters">
-                <h2 data-i18n="filters.title">בחר סינון</h2>
+                <h2 data-i18n="filters.title">Select Filters</h2>
 
                 <div class="filter-steps">
                     <div class="filter-step">
                         <div class="step-number">1</div>
                         <div class="filter-group">
-                            <label for="season-select" data-i18n="filters.season.label">עונה:</label>
+                            <label for="season-select" data-i18n="filters.season.label">Season:</label>
                             <select id="season-select">
-                                <option value="" data-i18n="filters.season.placeholder">בחר עונה...</option>
+                                <option value="" data-i18n="filters.season.placeholder">Select season...</option>
                             </select>
                         </div>
                     </div>
@@ -42,9 +42,9 @@
                     <div class="filter-step" id="league-step">
                         <div class="step-number">2</div>
                         <div class="filter-group">
-                            <label for="league-select" data-i18n="filters.league.label">ליגה:</label>
+                            <label for="league-select" data-i18n="filters.league.label">League:</label>
                             <select id="league-select" disabled>
-                                <option value="" data-i18n="filters.league.selectFirst">בחר עונה תחילה...</option>
+                                <option value="" data-i18n="filters.league.selectFirst">Select a season first...</option>
                             </select>
                         </div>
                     </div>
@@ -52,11 +52,11 @@
                     <div class="filter-step" id="team-step">
                         <div class="step-number">3</div>
                         <div class="filter-group">
-                            <label for="team-select" data-i18n="filters.team.label">קבוצה:</label>
+                            <label for="team-select" data-i18n="filters.team.label">Team:</label>
                             <select id="team-select" disabled>
-                                <option value="" data-i18n="filters.team.selectFirst">בחר ליגה תחילה...</option>
+                                <option value="" data-i18n="filters.team.selectFirst">Select a league first...</option>
                             </select>
-                            <p class="filter-hint" data-i18n="filters.team.hint">אופציונלי - השאר ריק לכל הקבוצות בליגה</p>
+                            <p class="filter-hint" data-i18n="filters.team.hint">Optional - leave empty for all teams in league</p>
                         </div>
                     </div>
                 </div>
@@ -64,37 +64,37 @@
             </section>
 
             <section class="preview">
-                <h2 data-i18n="preview.title">תצוגה מקדימה</h2>
+                <h2 data-i18n="preview.title">Preview</h2>
                 <div id="matches-preview" class="matches-list">
-                    <p class="loading" data-i18n="preview.loading">טוען משחקים...</p>
+                    <p class="loading" data-i18n="preview.loading">Loading matches...</p>
                 </div>
                 <p id="matches-count" class="matches-count"></p>
             </section>
 
             <section class="calendar-url">
-                <h2 data-i18n="calendar.title">כתובת לוח השנה</h2>
+                <h2 data-i18n="calendar.title">Calendar URL</h2>
                 <div class="url-container">
                     <input type="text" id="calendar-url" readonly>
-                    <button id="copy-btn" class="btn" data-i18n="calendar.copy">העתק</button>
+                    <button id="copy-btn" class="btn" data-i18n="calendar.copy">Copy</button>
                 </div>
 
                 <div class="calendar-actions">
                     <a id="google-calendar-link" href="#" class="btn btn-primary" target="_blank" data-i18n="calendar.addGoogle">
-                        הוסף ל-Google Calendar
+                        Add to Google Calendar
                     </a>
                     <a id="download-link" href="#" class="btn btn-secondary" download="basketball.ics" data-i18n="calendar.download">
-                        הורד קובץ ICS
+                        Download ICS File
                     </a>
                 </div>
 
                 <div class="instructions">
-                    <h3 data-i18n="instructions.title">הוראות הרשמה</h3>
+                    <h3 data-i18n="instructions.title">Subscription Instructions</h3>
                     <ol>
-                        <li data-i18n="instructions.step1">העתק את כתובת לוח השנה</li>
-                        <li data-i18n="instructions.step2">פתח את אפליקציית לוח השנה שלך (Google Calendar, Apple Calendar וכו')</li>
-                        <li data-i18n="instructions.step3">חפש אפשרות "הוסף לוח שנה מכתובת URL" או "הרשם ללוח שנה"</li>
-                        <li data-i18n="instructions.step4">הדבק את הכתובת</li>
-                        <li data-i18n="instructions.step5">לוח השנה יתעדכן אוטומטית עם משחקים חדשים</li>
+                        <li data-i18n="instructions.step1">Copy the calendar URL</li>
+                        <li data-i18n="instructions.step2">Open your calendar app (Google Calendar, Apple Calendar, etc.)</li>
+                        <li data-i18n="instructions.step3">Look for "Add calendar from URL" or "Subscribe to calendar"</li>
+                        <li data-i18n="instructions.step4">Paste the URL</li>
+                        <li data-i18n="instructions.step5">The calendar will automatically update with new games</li>
                     </ol>
                 </div>
             </section>
@@ -102,11 +102,11 @@
 
         <footer>
             <div class="last-updated-container">
-                <span class="last-updated-label" data-i18n="footer.lastUpdated">עודכן לאחרונה:</span>
+                <span class="last-updated-label" data-i18n="footer.lastUpdated">Last updated:</span>
                 <span id="last-update" class="last-updated-time">-</span>
-                <button id="refresh-btn" class="btn btn-refresh" data-i18n="footer.refresh">רענן נתונים</button>
+                <button id="refresh-btn" class="btn btn-refresh" data-i18n="footer.refresh">Refresh Data</button>
             </div>
-            <p class="data-source" data-i18n="footer.dataSource">נתונים מ-ibasketball.co.il</p>
+            <p class="data-source" data-i18n="footer.dataSource">Data from ibasketball.co.il</p>
         </footer>
     </div>
 

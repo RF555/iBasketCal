@@ -24,7 +24,6 @@ body {
     background-color: var(--background-color);
     color: var(--text-color);
     line-height: 1.6;
-    direction: rtl;
 }
 
 .container {
@@ -41,16 +40,12 @@ header {
     position: relative;
 }
 
-/* Language Switcher */
+/* Language Switcher - always on the right side */
 .lang-switcher {
     position: absolute;
     top: 0;
-    left: 0;
-}
-
-[dir="ltr"] .lang-switcher {
-    left: auto;
     right: 0;
+    left: auto;
 }
 
 .btn-lang {

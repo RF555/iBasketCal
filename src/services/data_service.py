@@ -204,8 +204,8 @@ if __name__ == '__main__':
         print(f"  - {t.get('name', 'Unknown')}")
 
     print("\n=== Sample Matches ===")
-    matches = service.get_all_matches(team_name="מכבי")
-    print(f"Found {len(matches)} matches for 'מכבי'")
+    matches = service.get_all_matches(team_name="Maccabi")
+    print(f"Found {len(matches)} matches for 'Maccabi'")
     for m in matches[:3]:
         home = m.get('homeTeam', {}).get('name', 'TBD')
         away = m.get('awayTeam', {}).get('name', 'TBD')
