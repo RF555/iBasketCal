@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Optional, Iterator, List, Dict, Any
 import threading
 
+from .. import config
+
 
 class Database:
     """
@@ -496,7 +498,7 @@ class Database:
 
         return {
             'exists': True,
-            'stale': age_minutes > 30,
+            'stale': age_minutes > config.CACHE_TTL_MINUTES,
             'last_updated': row['value'],
             'age_minutes': age_minutes,
             'stats': stats

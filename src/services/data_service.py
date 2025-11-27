@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from ..storage.database import Database, get_database
 from ..scraper.nbn23_scraper import NBN23Scraper
+from .. import config
 
 
 class DataService:
@@ -19,8 +20,6 @@ class DataService:
     Service layer for accessing basketball data.
     Uses SQLite database for storage with the scraper for data refresh.
     """
-
-    CACHE_TTL_MINUTES = 30
 
     def __init__(self, cache_dir: str = "cache"):
         self.cache_dir = Path(cache_dir)

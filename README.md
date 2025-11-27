@@ -173,6 +173,7 @@ iBasketCal/
 ├── src/
 │   ├── __init__.py
 │   ├── main.py                    # FastAPI application
+│   ├── config.py                  # Configuration (env vars)
 │   ├── types.py                   # TypedDict definitions
 │   ├── scraper/
 │   │   ├── __init__.py
@@ -253,7 +254,9 @@ ruff check src/
 
 ## Configuration
 
-Copy `.env.example` to `.env` and configure:
+Configuration is managed via environment variables with sensible defaults. The configuration module is at `src/config.py`.
+
+Copy `.env.example` to `.env` to customize:
 
 ```env
 # Server Settings
@@ -266,12 +269,20 @@ DATA_DIR=/data
 
 # Scraper Settings
 SCRAPER_HEADLESS=true
+WIDGET_URL=https://ibasketball.co.il/swish/
 
-# Cache Settings (in minutes)
-CACHE_TTL_MINUTES=30
+# Cache Settings
+# How long before cache is considered stale (in minutes)
+# Default: 7 days (10080 minutes)
+CACHE_TTL_MINUTES=10080
 
-# Scheduler Settings (in minutes)
-REFRESH_INTERVAL_MINUTES=30
+# Rate Limiting
+# Cooldown between manual refresh requests (in seconds)
+# Default: 5 minutes (300 seconds)
+REFRESH_COOLDOWN_SECONDS=300
+
+# Logging
+LOG_LEVEL=INFO
 ```
 
 ### Environment Variables
@@ -279,10 +290,14 @@ REFRESH_INTERVAL_MINUTES=30
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | Server port | `8000` |
+| `HOST` | Server host | `0.0.0.0` |
 | `DATA_DIR` | Directory for SQLite database | `cache/` (local) or `/app/cache` (container) |
 | `RAILWAY_VOLUME_MOUNT_PATH` | Auto-set by Railway for volume mount | - |
 | `SCRAPER_HEADLESS` | Run browser in headless mode | `true` |
-| `CACHE_TTL_MINUTES` | Cache time-to-live | `30` |
+| `WIDGET_URL` | NBN23 widget URL for token extraction | `https://ibasketball.co.il/swish/` |
+| `CACHE_TTL_MINUTES` | Cache time-to-live before considered stale | `10080` (7 days) |
+| `REFRESH_COOLDOWN_SECONDS` | Rate limit cooldown for manual refresh | `300` (5 minutes) |
+| `LOG_LEVEL` | Logging level | `INFO` |
 
 ### Railway Deployment
 
@@ -362,7 +377,7 @@ The scraper captures data for all Israeli basketball competitions including:
 ### Storage
 - **SQLite Database** - Efficient indexed storage (~180MB for all data)
 - **WAL Mode** - Allows concurrent reads during writes
-- **Automatic refresh** - Data refreshes every 30 minutes (background scheduler)
+- **Cache TTL** - Data considered fresh for 7 days (configurable via `CACHE_TTL_MINUTES`)
 
 ### Data
 - ~108,000 matches across all seasons

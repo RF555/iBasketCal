@@ -17,17 +17,14 @@ import threading
 
 from .services.data_service import DataService
 from .services.calendar_service import CalendarService
+from . import config
 
-# Get cache directory from environment variable
-# Priority: DATA_DIR > RAILWAY_VOLUME_MOUNT_PATH > /app/cache (container) > cache (local)
-CACHE_DIR = os.environ.get('DATA_DIR') or os.environ.get('RAILWAY_VOLUME_MOUNT_PATH') or (
-    '/app/cache' if os.path.exists('/app') else 'cache'
-)
-Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
-print(f"[*] Using cache directory: {CACHE_DIR}")
+# Ensure cache directory exists
+Path(config.CACHE_DIR).mkdir(parents=True, exist_ok=True)
+print(f"[*] Using cache directory: {config.CACHE_DIR}")
 
 # Initialize services with configured cache directory
-data_service = DataService(cache_dir=CACHE_DIR)
+data_service = DataService(cache_dir=config.CACHE_DIR)
 calendar_service = CalendarService()
 
 
@@ -80,8 +77,8 @@ class RateLimiter:
             self._last_request = None
 
 
-# Rate limiter: 5 minute cooldown between refreshes
-refresh_rate_limiter = RateLimiter(cooldown_seconds=300)
+# Rate limiter for refresh endpoint
+refresh_rate_limiter = RateLimiter(cooldown_seconds=config.REFRESH_COOLDOWN_SECONDS)
 
 
 @asynccontextmanager
