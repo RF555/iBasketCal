@@ -76,12 +76,15 @@ COPY src/ ./src/
 COPY static/ ./static/
 COPY requirements.txt .
 
-# Create cache directory with proper permissions
-RUN mkdir -p /app/cache && chmod 777 /app/cache
+# Create cache directories with proper permissions
+# /data is used when DATA_DIR env var is set (Railway deployment)
+# /app/cache is the fallback for container deployments
+RUN mkdir -p /app/cache /data \
+    && chmod 777 /app/cache /data
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash appuser \
-    && chown -R appuser:appuser /app
+    && chown -R appuser:appuser /app /data
 USER appuser
 
 # Environment variables
