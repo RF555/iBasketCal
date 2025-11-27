@@ -84,23 +84,18 @@ async def lifespan(app: FastAPI):
     cache_info = data_service.get_cache_info()
 
     if not cache_info['exists']:
-        print("[*] No cache found. Running initial scrape...")
-        print("[*] This may take 30-60 seconds...")
-        try:
-            data_service.get_data(force_refresh=True)
-            print("[+] Initial scrape complete!")
-        except Exception as e:
-            print(f"[!] Initial scrape failed: {e}")
-            print("[!] You can manually refresh via the web UI or /api/refresh endpoint")
+        print("[*] No cache found. Starting background scrape...")
+        data_service.refresh_async()
+        print("[*] App is ready. Data loading in background.")
     elif cache_info['stale']:
         print(f"[*] Cache is stale (last updated: {cache_info['last_updated']})")
-        print("[*] Consider refreshing data via the web UI")
+        print("[*] Starting background refresh...")
+        data_service.refresh_async()
     else:
         print(f"[+] Cache is fresh (last updated: {cache_info['last_updated']})")
 
-    yield  # Application runs here
+    yield
 
-    # Shutdown
     print("[*] Shutting down...")
 
 
@@ -340,8 +335,10 @@ async def refresh_status():
 async def health():
     """Health check endpoint."""
     cache_info = data_service.get_cache_info()
+    is_scraping = data_service.is_scraping()
     return {
         "status": "ok",
+        "is_scraping": is_scraping,
         "cache": cache_info,
         "database_size_mb": round(
             data_service.db.get_database_size() / (1024 * 1024), 2
