@@ -506,8 +506,9 @@ function updateCalendarUrl() {
     elements.calendarUrl.value = fullUrl;
     elements.downloadLink.href = `${calendarPath}?${queryString}`;
 
-    // Google Calendar subscribe URL
-    const googleUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(fullUrl)}`;
+    // Google Calendar subscribe URL - must use webcal:// protocol
+    const webcalUrl = fullUrl.replace(/^https?:\/\//, 'webcal://');
+    const googleUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcalUrl)}`;
     elements.googleLink.href = googleUrl;
 }
 

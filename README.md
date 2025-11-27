@@ -138,11 +138,19 @@ http://localhost:8000/calendar.ics?competition=לאומית
 ### Adding to Calendar Apps
 
 #### Google Calendar
+
+**Option 1: Use the "Add to Google Calendar" button** (recommended)
+- Click the "Add to Google Calendar" button in the web interface
+- Google Calendar will open with the subscription pre-configured
+
+**Option 2: Manual subscription**
 1. Open Google Calendar
 2. Click the `+` next to "Other calendars"
 3. Select "From URL"
 4. Paste the calendar URL
 5. Click "Add calendar"
+
+> **Note:** The "Add to Google Calendar" button uses the `webcal://` protocol which Google Calendar requires for direct subscription links.
 
 #### Apple Calendar
 1. Open Calendar app
