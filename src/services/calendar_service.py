@@ -231,58 +231,6 @@ class CalendarService:
 
         return "\r\n".join(result)
 
-    def filter_matches_by_date_range(
-        self,
-        matches: List[Dict[str, Any]],
-        days_ahead: Optional[int] = None,
-        days_behind: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Filter matches to a specific date range.
-
-        Args:
-            matches: List of match dictionaries
-            days_ahead: Only include matches within this many days in the future
-            days_behind: Only include matches within this many days in the past
-
-        Returns:
-            Filtered list of matches
-        """
-        now = datetime.now(timezone.utc)
-        filtered = []
-
-        for match in matches:
-            date_str = match.get('date', '')
-            if not date_str:
-                continue
-
-            try:
-                if date_str.endswith('Z'):
-                    dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-                else:
-                    dt = datetime.fromisoformat(date_str)
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=timezone.utc)
-
-                # Check date range
-                if days_ahead is not None:
-                    cutoff = now + timedelta(days=days_ahead)
-                    if dt > cutoff:
-                        continue
-
-                if days_behind is not None:
-                    cutoff = now - timedelta(days=days_behind)
-                    if dt < cutoff:
-                        continue
-
-                filtered.append(match)
-
-            except (ValueError, TypeError):
-                # Skip matches with invalid dates
-                continue
-
-        return filtered
-
 
 # CLI entry point for testing
 if __name__ == '__main__':
@@ -295,16 +243,8 @@ if __name__ == '__main__':
     matches = data_service.get_all_matches()
     print(f"Total matches: {len(matches)}")
 
-    # Filter to next 30 days
-    filtered = calendar_service.filter_matches_by_date_range(
-        matches,
-        days_ahead=30,
-        days_behind=7
-    )
-    print(f"Matches in date range: {len(filtered)}")
-
     # Generate calendar
-    ics_content = calendar_service.generate_ics(filtered, "Israeli Basketball - Test")
+    ics_content = calendar_service.generate_ics(matches[:100], "Israeli Basketball - Test")
     print(f"\nGenerated ICS ({len(ics_content)} bytes)")
     print("\n--- First 1000 chars ---")
     print(ics_content[:1000])

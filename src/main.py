@@ -227,18 +227,15 @@ async def get_teams(
 async def get_calendar(
     season: Optional[str] = Query(None, description="Season ID"),
     competition: Optional[str] = Query(None, description="Competition name filter"),
-    team: Optional[str] = Query(None, description="Team name filter"),
-    days: Optional[int] = Query(None, description="Only include games within N days from now"),
-    past_days: Optional[int] = Query(None, description="Only include games from past N days")
+    team: Optional[str] = Query(None, description="Team name filter")
 ):
     """
-    Generate ICS calendar feed with all season games by default.
+    Generate ICS calendar feed with all season games.
 
     Example URLs:
     - /calendar.ics - All games for the season
     - /calendar.ics?team=מכבי - All games for a team
-    - /calendar.ics?competition=ליגת על&days=30 - Games within 30 days ahead
-    - /calendar.ics?team=הפועל&days=60&past_days=14 - Custom date range
+    - /calendar.ics?competition=ליגת על - Premier League games
     """
     try:
         # Get matches with filters
@@ -247,14 +244,6 @@ async def get_calendar(
             competition_name=competition,
             team_name=team
         )
-
-        # Apply date range filter only if explicitly requested
-        if days is not None or past_days is not None:
-            matches = calendar_service.filter_matches_by_date_range(
-                matches,
-                days_ahead=days,
-                days_behind=past_days
-            )
 
         # Generate calendar name
         name_parts = ["Israeli Basketball"]
