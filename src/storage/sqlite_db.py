@@ -6,6 +6,8 @@ Provides efficient storage and retrieval of basketball data with:
 - Atomic transactions for data safety
 - Incremental updates (no full rewrites)
 - Concurrent read access via WAL mode
+
+This is the SQLite implementation of the DatabaseInterface.
 """
 
 import sqlite3
@@ -16,22 +18,65 @@ from pathlib import Path
 from typing import Optional, Iterator, List, Dict, Any
 import threading
 
+from .base import DatabaseInterface
 from .. import config
 
 
-class Database:
+class SQLiteDatabase(DatabaseInterface):
     """
     SQLite database for basketball data storage.
     Thread-safe with connection per thread.
+
+    Implements the DatabaseInterface abstract base class.
     """
 
     SCHEMA_VERSION = 1
 
     def __init__(self, db_path: str = "cache/basketball.db"):
+        """
+        Create SQLite database instance.
+
+        Args:
+            db_path: Path to the SQLite database file
+        """
         self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
+        self._initialized = False
+
+    # =========================================================================
+    # LIFECYCLE
+    # =========================================================================
+
+    def initialize(self) -> None:
+        """Initialize the database connection and schema."""
+        if self._initialized:
+            return
+
+        # Ensure parent directory exists
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Initialize schema
         self._init_schema()
+        self._initialized = True
+
+    def close(self) -> None:
+        """Close database connections and clean up resources."""
+        if hasattr(self._local, 'conn') and self._local.conn is not None:
+            self._local.conn.close()
+            self._local.conn = None
+
+    def health_check(self) -> bool:
+        """Check if the database connection is healthy."""
+        try:
+            conn = self._get_connection()
+            conn.execute("SELECT 1")
+            return True
+        except Exception:
+            return False
+
+    # =========================================================================
+    # CONNECTION MANAGEMENT
+    # =========================================================================
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get thread-local database connection."""
@@ -162,7 +207,7 @@ class Database:
     # WRITE OPERATIONS
     # =========================================================================
 
-    def save_seasons(self, seasons: List[Dict]) -> int:
+    def save_seasons(self, seasons: List[Dict[str, Any]]) -> int:
         """Save seasons to database. Returns count saved."""
         with self.transaction() as conn:
             conn.executemany('''
@@ -180,7 +225,7 @@ class Database:
             ])
         return len(seasons)
 
-    def save_competitions(self, season_id: str, competitions: List[Dict]) -> int:
+    def save_competitions(self, season_id: str, competitions: List[Dict[str, Any]]) -> int:
         """Save competitions and their groups for a season."""
         with self.transaction() as conn:
             for comp in competitions:
@@ -215,7 +260,7 @@ class Database:
     def save_matches(
         self,
         group_id: str,
-        calendar_data: Dict,
+        calendar_data: Dict[str, Any],
         competition_name: str = '',
         group_name: str = '',
         season_id: str = ''
@@ -304,7 +349,7 @@ class Database:
 
         return len(matches)
 
-    def save_standings(self, group_id: str, standings: List[Dict]) -> int:
+    def save_standings(self, group_id: str, standings: List[Dict[str, Any]]) -> int:
         """Save standings for a group."""
         with self.transaction() as conn:
             conn.executemany('''
@@ -333,7 +378,7 @@ class Database:
     # READ OPERATIONS
     # =========================================================================
 
-    def get_seasons(self) -> List[Dict]:
+    def get_seasons(self) -> List[Dict[str, Any]]:
         """Get all seasons, ordered by name descending."""
         conn = self._get_connection()
         rows = conn.execute(
@@ -341,7 +386,7 @@ class Database:
         ).fetchall()
         return [json.loads(row['data']) for row in rows]
 
-    def get_competitions(self, season_id: str) -> List[Dict]:
+    def get_competitions(self, season_id: str) -> List[Dict[str, Any]]:
         """Get competitions for a season."""
         conn = self._get_connection()
         rows = conn.execute(
@@ -350,7 +395,7 @@ class Database:
         ).fetchall()
         return [json.loads(row['data']) for row in rows]
 
-    def get_all_competitions(self) -> List[Dict]:
+    def get_all_competitions(self) -> List[Dict[str, Any]]:
         """Get all competitions across all seasons."""
         conn = self._get_connection()
         rows = conn.execute('''
@@ -374,10 +419,10 @@ class Database:
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
         limit: Optional[int] = None
-    ) -> List[Dict]:
+    ) -> List[Dict[str, Any]]:
         """Get matches with flexible filtering."""
         query = "SELECT data FROM matches WHERE 1=1"
-        params = []
+        params: List[Any] = []
 
         if season_id:
             query += " AND season_id = ?"
@@ -417,7 +462,7 @@ class Database:
         rows = conn.execute(query, params).fetchall()
         return [json.loads(row['data']) for row in rows]
 
-    def get_teams(self, season_id: Optional[str] = None) -> List[Dict]:
+    def get_teams(self, season_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all teams, optionally filtered by season."""
         conn = self._get_connection()
 
@@ -436,7 +481,7 @@ class Database:
 
         return [{'id': r['id'], 'name': r['name'], 'logo': r['logo']} for r in rows]
 
-    def search_teams(self, query: str, season_id: Optional[str] = None) -> List[Dict]:
+    def search_teams(self, query: str, season_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Search teams by name."""
         conn = self._get_connection()
 
@@ -456,7 +501,7 @@ class Database:
 
         return [{'id': r['id'], 'name': r['name'], 'logo': r['logo']} for r in rows]
 
-    def get_standings(self, group_id: str) -> List[Dict]:
+    def get_standings(self, group_id: str) -> List[Dict[str, Any]]:
         """Get standings for a group."""
         conn = self._get_connection()
         rows = conn.execute(
@@ -521,15 +566,3 @@ class Database:
         """Reclaim unused space in database file."""
         conn = self._get_connection()
         conn.execute('VACUUM')
-
-
-# Singleton instance
-_db_instance: Optional[Database] = None
-
-
-def get_database(db_path: str = "cache/basketball.db") -> Database:
-    """Get or create database singleton."""
-    global _db_instance
-    if _db_instance is None:
-        _db_instance = Database(db_path)
-    return _db_instance

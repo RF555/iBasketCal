@@ -1,7 +1,8 @@
 """
-Data Service - Provides access to basketball data from SQLite database.
+Data Service - Provides access to basketball data from the database.
 
 Manages data access and provides query methods for seasons, competitions, and matches.
+Supports multiple database backends via the DatabaseInterface abstraction.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -10,7 +11,7 @@ import threading
 from typing import Optional, List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor
 
-from ..storage.database import Database, get_database
+from ..storage import get_database, DatabaseInterface
 from ..scraper.nbn23_scraper import NBN23Scraper
 from .. import config
 
@@ -18,15 +19,16 @@ from .. import config
 class DataService:
     """
     Service layer for accessing basketball data.
-    Uses SQLite database for storage with the scraper for data refresh.
+    Uses the database interface for storage with the scraper for data refresh.
+    Supports multiple database backends (SQLite, Turso, Supabase) via DB_TYPE env var.
     """
 
     def __init__(self, cache_dir: str = "cache"):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
 
-        # Database
-        self.db = get_database(str(self.cache_dir / "basketball.db"))
+        # Get database from factory (respects DB_TYPE env var)
+        self.db: DatabaseInterface = get_database()
 
         # Scraper (lazy initialization)
         self._scraper: Optional[NBN23Scraper] = None
