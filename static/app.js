@@ -468,8 +468,8 @@ function displayMatches(matches) {
         if (match.status === 'CLOSED' && match.score?.totals) {
             const homeScore = getScore(match, 'home');
             const awayScore = getScore(match, 'away');
-            // Use LTR marks (\u200E) around scores to prevent RTL reordering
-            teams = `${home} \u200E${homeScore}-${awayScore}\u200E ${away}`;
+            // Use explicit score labels to avoid RTL confusion
+            teams = `${home} (${homeScore}) ${t('match.versus')} ${away} (${awayScore})`;
         }
 
         return `

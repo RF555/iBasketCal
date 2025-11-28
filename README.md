@@ -499,8 +499,8 @@ The scraper captures data for all Israeli basketball competitions including:
 - The ICS file uses proper encoding for Hebrew text.
 
 **"Scores appear swapped in RTL mode"**
-- This was a known issue with bidirectional text rendering where scores (LTR numbers) appeared reversed in RTL Hebrew context.
-- Fixed by using Unicode LTR marks (`\u200E`) around score displays to ensure correct ordering.
+- This was a known issue where scores displayed as `Home 80-103 Away` appeared visually closer to the wrong team in RTL Hebrew context.
+- Fixed by placing each team's score in parentheses next to their name: `Home (80) vs Away (103)`.
 
 ## Technical Details
 
