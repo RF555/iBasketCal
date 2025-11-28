@@ -128,7 +128,8 @@ class CalendarService:
                     elif team_id == away_team.get('id'):
                         away_score = total
 
-            summary = f"{home} {home_score}-{away_score} {away}"
+            # Use LTR mark (\u200E) around scores to prevent RTL reordering
+            summary = f"{home} \u200E{home_score}-{away_score}\u200E {away}"
         elif status == 'LIVE':
             summary = f"LIVE: {home} vs {away}"
         else:

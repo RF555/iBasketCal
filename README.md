@@ -498,6 +498,10 @@ The scraper captures data for all Israeli basketball competitions including:
 - Ensure your calendar app supports UTF-8.
 - The ICS file uses proper encoding for Hebrew text.
 
+**"Scores appear swapped in RTL mode"**
+- This was a known issue with bidirectional text rendering where scores (LTR numbers) appeared reversed in RTL Hebrew context.
+- Fixed by using Unicode LTR marks (`\u200E`) around score displays to ensure correct ordering.
+
 ## Technical Details
 
 ### Storage Architecture
