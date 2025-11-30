@@ -24,93 +24,171 @@
             <p class="subtitle" data-i18n="header.subtitle">Create subscribable calendars for Israeli basketball games</p>
         </header>
 
-        <main>
-            <section class="filters">
-                <h2 data-i18n="filters.title">Select Filters</h2>
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="calendar" data-i18n="tabs.calendar">Calendar</button>
+            <button class="tab-btn" data-tab="players" data-i18n="tabs.players">Players</button>
+        </nav>
 
-                <div class="filter-steps">
-                    <div class="filter-step">
-                        <div class="step-number">1</div>
-                        <div class="filter-group">
-                            <label for="season-select" data-i18n="filters.season.label">Season:</label>
-                            <select id="season-select">
-                                <option value="" data-i18n="filters.season.placeholder">Select season...</option>
-                            </select>
+        <!-- Tab Content Container -->
+        <div class="tab-content">
+            <!-- Calendar Tab (existing content) -->
+            <div id="calendar-tab" class="tab-panel active">
+                <section class="filters">
+                    <h2 data-i18n="filters.title">Select Filters</h2>
+
+                    <div class="filter-steps">
+                        <div class="filter-step">
+                            <div class="step-number">1</div>
+                            <div class="filter-group">
+                                <label for="season-select" data-i18n="filters.season.label">Season:</label>
+                                <select id="season-select">
+                                    <option value="" data-i18n="filters.season.placeholder">Select season...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="filter-step" id="league-step">
+                            <div class="step-number">2</div>
+                            <div class="filter-group">
+                                <label for="league-select" data-i18n="filters.league.label">League:</label>
+                                <select id="league-select" disabled>
+                                    <option value="" data-i18n="filters.league.selectFirst">Select a season first...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="filter-step" id="team-step">
+                            <div class="step-number">3</div>
+                            <div class="filter-group">
+                                <label for="team-select" data-i18n="filters.team.label">Team:</label>
+                                <select id="team-select" disabled>
+                                    <option value="" data-i18n="filters.team.selectFirst">Select a league first...</option>
+                                </select>
+                                <p class="filter-hint" data-i18n="filters.team.hint">Optional - leave empty for all teams in league</p>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="filter-step" id="league-step">
-                        <div class="step-number">2</div>
-                        <div class="filter-group">
-                            <label for="league-select" data-i18n="filters.league.label">League:</label>
-                            <select id="league-select" disabled>
-                                <option value="" data-i18n="filters.league.selectFirst">Select a season first...</option>
-                            </select>
+                </section>
+
+                <section class="preview">
+                    <h2 data-i18n="preview.title">Preview</h2>
+                    <div id="matches-preview" class="matches-list">
+                        <p class="loading" data-i18n="preview.loading">Loading matches...</p>
+                    </div>
+                    <p id="matches-count" class="matches-count"></p>
+                </section>
+
+                <section class="calendar-url">
+                    <h2 data-i18n="calendar.title">Calendar URL</h2>
+                    <div class="url-container">
+                        <input type="text" id="calendar-url" readonly>
+                        <button id="copy-btn" class="btn" data-i18n="calendar.copy">Copy</button>
+                    </div>
+
+                    <div class="calendar-actions">
+                        <a id="google-calendar-link" href="#" class="btn btn-primary" target="_blank" data-i18n="calendar.addGoogle">
+                            Add to Google Calendar
+                        </a>
+                        <a id="apple-calendar-link" href="#" class="btn btn-primary" data-i18n="calendar.addApple">
+                            Add to Apple Calendar
+                        </a>
+                        <div class="dropdown">
+                            <button class="btn btn-primary dropdown-toggle" id="outlook-dropdown-btn" type="button">
+                                <span data-i18n="calendar.addOutlook">Add to Outlook</span>
+                                <span class="dropdown-arrow">▼</span>
+                            </button>
+                            <div class="dropdown-menu" id="outlook-dropdown-menu">
+                                <a id="outlook-365-link" href="#" target="_blank" data-i18n="calendar.outlook365">Outlook 365 (Work/School)</a>
+                                <a id="outlook-com-link" href="#" target="_blank" data-i18n="calendar.outlookCom">Outlook.com (Personal)</a>
+                            </div>
+                        </div>
+                        <a id="download-link" href="#" class="btn btn-secondary" download="basketball.ics" data-i18n="calendar.download">
+                            Download ICS File
+                        </a>
+                    </div>
+
+                    <div class="instructions">
+                        <h3 data-i18n="instructions.title">Subscription Instructions</h3>
+                        <ol>
+                            <li data-i18n="instructions.step1">Click your preferred calendar button (Google, Apple, or Outlook)</li>
+                            <li data-i18n="instructions.step2">Confirm the subscription in your calendar app</li>
+                            <li data-i18n="instructions.step3">The calendar will automatically update with new games</li>
+                        </ol>
+                        <p class="instructions-note" data-i18n="instructions.note">Note: Sync updates may take up to 24 hours, depending on your calendar app</p>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Players Tab (new) -->
+            <div id="players-tab" class="tab-panel">
+                <section class="player-search-section">
+                    <h2 data-i18n="player.title">Player Search</h2>
+                    <div class="search-container">
+                        <input type="text" id="player-search" class="player-search-input" placeholder="Type player name...">
+                        <div id="player-suggestions" class="suggestions-dropdown"></div>
+                    </div>
+                    <p class="search-hint" data-i18n="player.searchHint">Search for a player to see their teams and statistics</p>
+                </section>
+
+                <section id="player-details" class="player-details hidden">
+                    <h2 id="player-name"></h2>
+
+                    <!-- Teams with Calendar Subscription -->
+                    <div class="player-teams-section">
+                        <div class="player-current-teams">
+                            <h3 data-i18n="player.currentTeams">Current Teams</h3>
+                            <div id="player-current-teams" class="teams-grid"></div>
+                        </div>
+
+                        <div class="player-past-teams">
+                            <h3 data-i18n="player.pastTeams">Past Teams</h3>
+                            <div id="player-past-teams" class="teams-grid"></div>
                         </div>
                     </div>
 
-                    <div class="filter-step" id="team-step">
-                        <div class="step-number">3</div>
-                        <div class="filter-group">
-                            <label for="team-select" data-i18n="filters.team.label">Team:</label>
-                            <select id="team-select" disabled>
-                                <option value="" data-i18n="filters.team.selectFirst">Select a league first...</option>
-                            </select>
-                            <p class="filter-hint" data-i18n="filters.team.hint">Optional - leave empty for all teams in league</p>
+                    <!-- Leagues -->
+                    <div class="player-leagues-section">
+                        <h3 data-i18n="player.leagues">Leagues</h3>
+                        <ul id="player-leagues-list" class="leagues-list"></ul>
+                    </div>
+
+                    <!-- Statistics -->
+                    <div class="player-statistics-section">
+                        <h3 data-i18n="stats.title">Statistics</h3>
+                        <div class="stats-controls">
+                            <label data-i18n="stats.season">Season:</label>
+                            <select id="stats-season-select"></select>
+                        </div>
+                        <div class="stats-table-container">
+                            <table class="stats-table" id="player-stats-table">
+                                <thead>
+                                    <tr>
+                                        <th data-i18n="stats.games">G</th>
+                                        <th data-i18n="stats.minutes">MIN</th>
+                                        <th data-i18n="stats.points">PTS</th>
+                                        <th data-i18n="stats.rebounds">REB</th>
+                                        <th data-i18n="stats.assists">AST</th>
+                                        <th data-i18n="stats.steals">STL</th>
+                                        <th data-i18n="stats.blocks">BLK</th>
+                                        <th data-i18n="stats.turnovers">TO</th>
+                                        <th data-i18n="stats.efficiency">EFF</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="player-stats-body"></tbody>
+                            </table>
+                            <p id="no-stats-message" class="no-stats hidden" data-i18n="stats.noStats">No statistics available</p>
                         </div>
                     </div>
-                </div>
+                </section>
 
-            </section>
-
-            <section class="preview">
-                <h2 data-i18n="preview.title">Preview</h2>
-                <div id="matches-preview" class="matches-list">
-                    <p class="loading" data-i18n="preview.loading">Loading matches...</p>
+                <!-- Player Refresh Button -->
+                <div class="player-refresh-container">
+                    <button id="refresh-players-btn" class="btn btn-refresh" data-i18n="player.refresh">Refresh Player Data</button>
                 </div>
-                <p id="matches-count" class="matches-count"></p>
-            </section>
-
-            <section class="calendar-url">
-                <h2 data-i18n="calendar.title">Calendar URL</h2>
-                <div class="url-container">
-                    <input type="text" id="calendar-url" readonly>
-                    <button id="copy-btn" class="btn" data-i18n="calendar.copy">Copy</button>
-                </div>
-
-                <div class="calendar-actions">
-                    <a id="google-calendar-link" href="#" class="btn btn-primary" target="_blank" data-i18n="calendar.addGoogle">
-                        Add to Google Calendar
-                    </a>
-                    <a id="apple-calendar-link" href="#" class="btn btn-primary" data-i18n="calendar.addApple">
-                        Add to Apple Calendar
-                    </a>
-                    <div class="dropdown">
-                        <button class="btn btn-primary dropdown-toggle" id="outlook-dropdown-btn" type="button">
-                            <span data-i18n="calendar.addOutlook">Add to Outlook</span>
-                            <span class="dropdown-arrow">▼</span>
-                        </button>
-                        <div class="dropdown-menu" id="outlook-dropdown-menu">
-                            <a id="outlook-365-link" href="#" target="_blank" data-i18n="calendar.outlook365">Outlook 365 (Work/School)</a>
-                            <a id="outlook-com-link" href="#" target="_blank" data-i18n="calendar.outlookCom">Outlook.com (Personal)</a>
-                        </div>
-                    </div>
-                    <a id="download-link" href="#" class="btn btn-secondary" download="basketball.ics" data-i18n="calendar.download">
-                        Download ICS File
-                    </a>
-                </div>
-
-                <div class="instructions">
-                    <h3 data-i18n="instructions.title">Subscription Instructions</h3>
-                    <ol>
-                        <li data-i18n="instructions.step1">Click your preferred calendar button (Google, Apple, or Outlook)</li>
-                        <li data-i18n="instructions.step2">Confirm the subscription in your calendar app</li>
-                        <li data-i18n="instructions.step3">The calendar will automatically update with new games</li>
-                    </ol>
-                    <p class="instructions-note" data-i18n="instructions.note">Note: Sync updates may take up to 24 hours, depending on your calendar app</p>
-                </div>
-            </section>
-        </main>
+            </div>
+        </div>
 
         <footer>
             <div class="last-updated-container">
@@ -120,6 +198,30 @@
             </div>
             <p class="data-source" data-i18n="footer.dataSource">Data from ibasketball.co.il</p>
         </footer>
+    </div>
+
+    <!-- Calendar Subscription Modal -->
+    <div id="calendar-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Subscribe to Calendar</h3>
+                <button class="modal-close" onclick="closeCalendarModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="modal-team-name"></p>
+                <div class="modal-actions">
+                    <a id="modal-google-link" href="#" class="btn btn-primary" target="_blank" data-i18n="calendar.addGoogle">
+                        Add to Google Calendar
+                    </a>
+                    <a id="modal-apple-link" href="#" class="btn btn-primary" data-i18n="calendar.addApple">
+                        Add to Apple Calendar
+                    </a>
+                    <a id="modal-download-link" href="#" class="btn btn-secondary" download="basketball.ics" data-i18n="calendar.download">
+                        Download ICS File
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="toast" class="toast"></div>

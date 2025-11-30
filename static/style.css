@@ -581,7 +581,403 @@ footer {
     background-color: #c62828;
 }
 
-/* Responsive */
+/* ============================================
+   TAB NAVIGATION
+   ============================================ */
+
+.tab-nav {
+    display: flex;
+    gap: 0;
+    background: var(--card-background);
+    border-radius: 12px 12px 0 0;
+    box-shadow: var(--shadow);
+    margin-bottom: 0;
+    overflow: hidden;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 15px 25px;
+    border: none;
+    background: transparent;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    border-bottom: 3px solid transparent;
+}
+
+.tab-btn:hover {
+    background-color: #f0f4f8;
+    color: var(--primary-color);
+}
+
+.tab-btn.active {
+    color: var(--primary-color);
+    background-color: #e8f4fd;
+    border-bottom-color: var(--primary-color);
+}
+
+.tab-content {
+    background: var(--card-background);
+    border-radius: 0 0 12px 12px;
+    margin-bottom: 20px;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+/* ============================================
+   PLAYER SEARCH
+   ============================================ */
+
+.player-search-section {
+    padding: 25px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.player-search-section h2 {
+    color: var(--primary-color);
+    font-size: 1.3rem;
+    margin-bottom: 15px;
+}
+
+.search-container {
+    position: relative;
+}
+
+.player-search-input {
+    width: 100%;
+    padding: 15px 20px;
+    border: 2px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 1.1rem;
+    transition: border-color 0.2s;
+}
+
+.player-search-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.search-hint {
+    margin-top: 10px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* Suggestions Dropdown */
+.suggestions-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
+}
+
+.suggestions-dropdown.show {
+    display: block;
+}
+
+.suggestion-item {
+    padding: 12px 20px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-item:hover {
+    background-color: #f0f4f8;
+}
+
+.suggestion-item .player-name {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.suggestion-item .player-teams {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 3px;
+}
+
+.no-results {
+    padding: 15px 20px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+/* ============================================
+   PLAYER DETAILS
+   ============================================ */
+
+.player-details {
+    padding: 25px;
+}
+
+.player-details.hidden {
+    display: none;
+}
+
+.player-details h2 {
+    color: var(--primary-color);
+    font-size: 1.5rem;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.player-teams-section {
+    margin-bottom: 25px;
+}
+
+.player-teams-section h3,
+.player-leagues-section h3,
+.player-statistics-section h3 {
+    color: var(--text-color);
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+}
+
+/* Teams Grid */
+.teams-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.team-card {
+    background: #f8f9fa;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.team-info {
+    flex: 1;
+}
+
+.team-info .team-name {
+    font-weight: 600;
+    color: var(--text-color);
+    display: block;
+}
+
+.team-info .team-league {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 3px;
+}
+
+.team-card .btn-subscribe {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.no-teams {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Leagues List */
+.leagues-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.leagues-list li {
+    padding: 10px 15px;
+    background: #f8f9fa;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.player-leagues-section {
+    margin-bottom: 25px;
+}
+
+/* ============================================
+   STATISTICS TABLE
+   ============================================ */
+
+.player-statistics-section {
+    margin-bottom: 20px;
+}
+
+.stats-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.stats-controls label {
+    font-weight: 600;
+}
+
+.stats-controls select {
+    padding: 8px 12px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    min-width: 150px;
+}
+
+.stats-table-container {
+    overflow-x: auto;
+}
+
+.stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.stats-table th,
+.stats-table td {
+    padding: 10px 12px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+}
+
+.stats-table th {
+    background: var(--primary-color);
+    color: white;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.stats-table tbody tr:nth-child(even) {
+    background: #f8f9fa;
+}
+
+.stats-table tbody tr:hover {
+    background: #e8f4fd;
+}
+
+.no-stats {
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 20px;
+    font-style: italic;
+}
+
+.no-stats.hidden {
+    display: none;
+}
+
+/* Player Refresh Container */
+.player-refresh-container {
+    padding: 20px 25px;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+}
+
+/* ============================================
+   MODAL
+   ============================================ */
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: var(--card-background);
+    border-radius: 12px;
+    max-width: 450px;
+    width: 90%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: var(--primary-color);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: var(--text-color);
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-body p {
+    margin-bottom: 20px;
+    color: var(--text-secondary);
+}
+
+.modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.modal-actions .btn {
+    text-align: center;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
 @media (max-width: 600px) {
     .container {
         padding: 10px;
@@ -613,5 +1009,43 @@ footer {
 
     .dropdown-menu {
         min-width: 100%;
+    }
+
+    /* Player Tab Responsive */
+    .tab-nav {
+        border-radius: 8px 8px 0 0;
+    }
+
+    .tab-btn {
+        padding: 12px 15px;
+        font-size: 0.9rem;
+    }
+
+    .player-search-section,
+    .player-details {
+        padding: 15px;
+    }
+
+    .teams-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .team-card {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
+    }
+
+    .team-card .btn-subscribe {
+        margin-top: 10px;
+    }
+
+    .stats-table {
+        font-size: 0.8rem;
+    }
+
+    .stats-table th,
+    .stats-table td {
+        padding: 8px 6px;
     }
 }

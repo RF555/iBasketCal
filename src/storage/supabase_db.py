@@ -584,3 +584,215 @@ class SupabaseDatabase(DatabaseInterface):
         """Optimize database storage - no-op for Supabase (not available via REST)."""
         # VACUUM requires direct SQL access, not available via Supabase REST API
         pass
+
+    # =========================================================================
+    # SPORTSPRESS PLAYER DATA
+    # =========================================================================
+
+    def save_players(self, players: List[Dict[str, Any]]) -> int:
+        """
+        Save players with minimal data (stats fetched on-demand).
+
+        Expects minimal player dicts with: id, name, teams, leagues, seasons
+        """
+        client = self._get_client()
+
+        rows = []
+        for player in players:
+            player_id = player.get('id')
+            if not player_id:
+                continue
+
+            # Handle both full API response and minimal data format
+            if 'name' in player:
+                name = player['name']
+            else:
+                title = player.get('title', {})
+                name = title.get('rendered', '') if isinstance(title, dict) else str(title)
+
+            # Handle both 'teams' and 'current_teams' for flexibility
+            teams = player.get('teams') or player.get('current_teams', [])
+
+            rows.append({
+                'id': player_id,
+                'name': name,
+                'team_ids': json.dumps(teams),
+                'league_ids': json.dumps(player.get('leagues', [])),
+                'season_ids': json.dumps(player.get('seasons', [])),
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            })
+
+        # Upsert in batches
+        for i in range(0, len(rows), BATCH_SIZE):
+            batch = rows[i:i + BATCH_SIZE]
+            client.table('sp_players').upsert(batch, on_conflict='id').execute()
+
+        return len(players)
+
+    def get_players(
+        self,
+        team_id: Optional[int] = None,
+        league_id: Optional[int] = None,
+        limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get players with optional filters (minimal data)."""
+        client = self._get_client()
+        query = client.table('sp_players').select('id, name, team_ids, league_ids, season_ids')
+
+        if team_id:
+            # PostgreSQL ILIKE for JSON array search
+            query = query.ilike('team_ids', f'%{team_id}%')
+
+        if league_id:
+            query = query.ilike('league_ids', f'%{league_id}%')
+
+        query = query.order('name')
+
+        if limit:
+            query = query.limit(limit)
+
+        response = query.execute()
+        return [self._row_to_player(row) for row in response.data]
+
+    def search_players(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Search players by name (returns minimal data).
+
+        Splits query into words and matches ALL words in any order.
+        Example: "יוסי כהן" matches "יוסי כהן", "כהן יוסי", "יוסי דוד כהן"
+        """
+        client = self._get_client()
+
+        # Split query into words and require all words to match
+        words = query.strip().split()
+
+        if not words:
+            return []
+
+        # Build query - each word must appear somewhere in the name
+        q = client.table('sp_players').select('id, name, team_ids, league_ids, season_ids')
+
+        for word in words:
+            q = q.ilike('name', f'%{word}%')
+
+        response = q.order('name').limit(limit).execute()
+        return [self._row_to_player(row) for row in response.data]
+
+    def get_player(self, player_id: int) -> Optional[Dict[str, Any]]:
+        """Get a single player by ID (minimal data - no stats)."""
+        client = self._get_client()
+        response = (
+            client.table('sp_players')
+            .select('id, name, team_ids, league_ids, season_ids')
+            .eq('id', player_id)
+            .execute()
+        )
+        if response.data:
+            return self._row_to_player(response.data[0])
+        return None
+
+    def _row_to_player(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert database row to player dict."""
+        return {
+            'id': row['id'],
+            'name': row['name'],
+            'teams': json.loads(row['team_ids'] or '[]'),
+            'leagues': json.loads(row['league_ids'] or '[]'),
+            'seasons': json.loads(row['season_ids'] or '[]')
+        }
+
+    def save_sportspress_leagues(self, leagues: List[Dict[str, Any]]) -> int:
+        """Save SportsPress leagues."""
+        client = self._get_client()
+
+        rows = [
+            {
+                'id': lg.get('id'),
+                'name': lg.get('name', ''),
+                'slug': lg.get('slug', ''),
+                'data': json.dumps(lg, ensure_ascii=False),
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }
+            for lg in leagues if lg.get('id')
+        ]
+
+        for i in range(0, len(rows), BATCH_SIZE):
+            batch = rows[i:i + BATCH_SIZE]
+            client.table('sp_leagues').upsert(batch, on_conflict='id').execute()
+
+        return len(leagues)
+
+    def save_sportspress_teams(self, teams: List[Dict[str, Any]]) -> int:
+        """Save SportsPress teams."""
+        client = self._get_client()
+
+        rows = [
+            {
+                'id': t.get('id'),
+                'name': t.get('name', ''),
+                'slug': t.get('slug', ''),
+                'data': json.dumps(t, ensure_ascii=False),
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }
+            for t in teams if t.get('id')
+        ]
+
+        for i in range(0, len(rows), BATCH_SIZE):
+            batch = rows[i:i + BATCH_SIZE]
+            client.table('sp_teams').upsert(batch, on_conflict='id').execute()
+
+        return len(teams)
+
+    def save_sportspress_seasons(self, seasons: List[Dict[str, Any]]) -> int:
+        """Save SportsPress seasons."""
+        client = self._get_client()
+
+        rows = [
+            {
+                'id': s.get('id'),
+                'name': s.get('name', ''),
+                'slug': s.get('slug', ''),
+                'data': json.dumps(s, ensure_ascii=False),
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }
+            for s in seasons if s.get('id')
+        ]
+
+        for i in range(0, len(rows), BATCH_SIZE):
+            batch = rows[i:i + BATCH_SIZE]
+            client.table('sp_seasons').upsert(batch, on_conflict='id').execute()
+
+        return len(seasons)
+
+    def get_sportspress_leagues(self) -> List[Dict[str, Any]]:
+        """Get all SportsPress leagues."""
+        client = self._get_client()
+        response = (
+            client.table('sp_leagues')
+            .select('id, name, slug')
+            .order('name')
+            .execute()
+        )
+        return [{'id': r['id'], 'name': r['name'], 'slug': r['slug']} for r in response.data]
+
+    def get_sportspress_teams(self) -> List[Dict[str, Any]]:
+        """Get all SportsPress teams."""
+        client = self._get_client()
+        response = (
+            client.table('sp_teams')
+            .select('id, name, slug')
+            .order('name')
+            .execute()
+        )
+        return [{'id': r['id'], 'name': r['name'], 'slug': r['slug']} for r in response.data]
+
+    def get_sportspress_seasons(self) -> List[Dict[str, Any]]:
+        """Get all SportsPress seasons."""
+        client = self._get_client()
+        response = (
+            client.table('sp_seasons')
+            .select('id, name, slug')
+            .order('name', desc=True)
+            .execute()
+        )
+        return [{'id': r['id'], 'name': r['name'], 'slug': r['slug']} for r in response.data]

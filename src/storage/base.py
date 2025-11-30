@@ -313,3 +313,137 @@ class DatabaseInterface(ABC):
         - Supabase: VACUUM via SQL (not available via REST)
         """
         pass
+
+    # =========================================================================
+    # SPORTSPRESS PLAYER DATA
+    # =========================================================================
+
+    @abstractmethod
+    def save_players(self, players: List[Dict[str, Any]]) -> int:
+        """
+        Save or update players from SportsPress API.
+
+        Args:
+            players: List of player dictionaries from SportsPress API
+                    Each contains 'id', 'title', 'leagues', 'teams', etc.
+
+        Returns:
+            Number of players saved
+        """
+        pass
+
+    @abstractmethod
+    def get_players(
+        self,
+        team_id: Optional[int] = None,
+        league_id: Optional[int] = None,
+        limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get players with optional filters.
+
+        Args:
+            team_id: Filter by team ID
+            league_id: Filter by league ID
+            limit: Maximum number of players to return
+
+        Returns:
+            List of player dictionaries
+        """
+        pass
+
+    @abstractmethod
+    def search_players(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Search players by name.
+
+        Args:
+            query: Search query (partial name match)
+            limit: Maximum number of results
+
+        Returns:
+            List of matching player dictionaries
+        """
+        pass
+
+    @abstractmethod
+    def get_player(self, player_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get a single player by ID with full details.
+
+        Args:
+            player_id: The player's ID
+
+        Returns:
+            Player dictionary or None if not found
+        """
+        pass
+
+    @abstractmethod
+    def save_sportspress_leagues(self, leagues: List[Dict[str, Any]]) -> int:
+        """
+        Save SportsPress league metadata.
+
+        Args:
+            leagues: List of league dictionaries from SportsPress API
+
+        Returns:
+            Number of leagues saved
+        """
+        pass
+
+    @abstractmethod
+    def save_sportspress_teams(self, teams: List[Dict[str, Any]]) -> int:
+        """
+        Save SportsPress team metadata.
+
+        Args:
+            teams: List of team dictionaries from SportsPress API
+
+        Returns:
+            Number of teams saved
+        """
+        pass
+
+    @abstractmethod
+    def save_sportspress_seasons(self, seasons: List[Dict[str, Any]]) -> int:
+        """
+        Save SportsPress season metadata.
+
+        Args:
+            seasons: List of season dictionaries from SportsPress API
+
+        Returns:
+            Number of seasons saved
+        """
+        pass
+
+    @abstractmethod
+    def get_sportspress_leagues(self) -> List[Dict[str, Any]]:
+        """
+        Get all SportsPress leagues.
+
+        Returns:
+            List of league dictionaries with 'id' and 'name'
+        """
+        pass
+
+    @abstractmethod
+    def get_sportspress_teams(self) -> List[Dict[str, Any]]:
+        """
+        Get all SportsPress teams.
+
+        Returns:
+            List of team dictionaries with 'id' and 'name'
+        """
+        pass
+
+    @abstractmethod
+    def get_sportspress_seasons(self) -> List[Dict[str, Any]]:
+        """
+        Get all SportsPress seasons.
+
+        Returns:
+            List of season dictionaries with 'id' and 'name'
+        """
+        pass

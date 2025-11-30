@@ -4,6 +4,10 @@ Israeli Basketball Calendar - FastAPI Application
 Provides REST API and ICS calendar endpoints for Israeli basketball games.
 """
 
+# Load environment variables from .env file BEFORE any other imports
+from dotenv import load_dotenv
+load_dotenv()
+
 from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI, Query, Response, HTTPException
@@ -101,7 +105,9 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Shutdown: Cleanup resources
     print("[*] Shutting down...")
+    data_service.shutdown()
 
 
 # Initialize FastAPI app with lifespan
@@ -349,6 +355,128 @@ async def health():
             data_service.db.get_database_size() / (1024 * 1024), 2
         )
     }
+
+
+# ============================================================================
+# PLAYER API ENDPOINTS
+# ============================================================================
+
+@app.get("/api/players")
+async def search_players(
+    q: Optional[str] = Query(None, description="Search query for player name"),
+    team_id: Optional[int] = Query(None, description="Filter by team ID"),
+    league_id: Optional[int] = Query(None, description="Filter by league ID"),
+    limit: int = Query(50, le=100, description="Maximum number of results")
+):
+    """
+    Search or list players.
+
+    - If `q` is provided, searches by player name
+    - If `team_id` or `league_id` is provided, filters by those IDs
+    - Returns player summary data (id, name, teams, leagues)
+    """
+    try:
+        if q:
+            players = data_service.search_players(q, limit=limit)
+        else:
+            players = data_service.get_players(
+                team_id=team_id,
+                league_id=league_id,
+                limit=limit
+            )
+
+        # Return simplified player data for list view
+        return [
+            {
+                'id': p.get('id'),
+                'name': p.get('name', ''),
+                'number': p.get('number', ''),
+                'current_teams': p.get('teams', p.get('current_teams', [])),
+                'past_teams': p.get('past_teams', []),
+                'leagues': p.get('leagues', [])
+            }
+            for p in players
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/players/{player_id}")
+async def get_player(player_id: int):
+    """
+    Get a single player by ID with full details and statistics.
+
+    Statistics are fetched on-demand from the SportsPress API.
+    This may take 1-2 seconds as it makes an external API call.
+
+    Returns player data with:
+    - Resolved team and league names (_current_teams, _past_teams, _leagues)
+    - Full statistics from SportsPress API
+    """
+    try:
+        player = data_service.get_player_with_stats(player_id)
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+        return player
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/players/{player_id}/leagues")
+async def get_player_leagues(player_id: int):
+    """
+    Get all leagues for a player.
+
+    Returns list of leagues the player is registered in.
+    """
+    try:
+        leagues = data_service.get_player_leagues(player_id)
+        return leagues
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/players/refresh")
+async def refresh_players():
+    """
+    Start a background refresh of player data from SportsPress.
+
+    This fetches all players, teams, leagues from the SportsPress API.
+    """
+    try:
+        started = data_service.refresh_players_async()
+        if started:
+            return {
+                "status": "started",
+                "message": "Player data refresh started in background."
+            }
+        else:
+            return {
+                "status": "in_progress",
+                "message": "A refresh is already in progress."
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/sp-leagues")
+async def get_sportspress_leagues():
+    """Get all SportsPress leagues for lookup."""
+    try:
+        return data_service.get_sportspress_leagues()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/sp-teams")
+async def get_sportspress_teams():
+    """Get all SportsPress teams for lookup."""
+    try:
+        return data_service.get_sportspress_teams()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Run with: uvicorn src.main:app --reload

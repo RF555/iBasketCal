@@ -9,6 +9,10 @@
   "lang": {
     "switcher": "עברית"
   },
+  "tabs": {
+    "calendar": "Calendar",
+    "players": "Players"
+  },
   "filters": {
     "title": "Select Filters",
     "season": {
@@ -85,5 +89,43 @@
     "timeout": "Request timed out. Please try again.",
     "rateLimited": "Please wait {{seconds}} seconds before refreshing again.",
     "refreshTimeout": "Refresh is taking too long. Please check back later."
+  },
+  "player": {
+    "title": "Player Search",
+    "placeholder": "Type player name...",
+    "searchHint": "Search for a player to see their teams and statistics",
+    "noResults": "No players found",
+    "teams": "Teams",
+    "currentTeams": "Current Teams",
+    "pastTeams": "Past Teams",
+    "leagues": "Leagues",
+    "loading": "Loading player...",
+    "loadingStats": "Loading statistics...",
+    "statsUnavailable": "Unable to load statistics. Please try again later.",
+    "subscribeTeam": "Subscribe to Calendar",
+    "subscribeTitle": "Subscribe to {{team}} Calendar",
+    "refresh": "Refresh Player Data",
+    "refreshing": "Refreshing...",
+    "noTeams": "No teams"
+  },
+  "stats": {
+    "title": "Statistics",
+    "season": "Season",
+    "games": "Games",
+    "minutes": "Minutes",
+    "points": "Points",
+    "rebounds": "Rebounds",
+    "reboundsOff": "Off. Reb",
+    "reboundsDef": "Def. Reb",
+    "assists": "Assists",
+    "steals": "Steals",
+    "blocks": "Blocks",
+    "turnovers": "Turnovers",
+    "fouls": "Fouls",
+    "efficiency": "EFF",
+    "fg2": "2PT FG",
+    "fg3": "3PT FG",
+    "ft": "Free Throws",
+    "noStats": "No statistics available"
   }
 }

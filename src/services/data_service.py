@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from ..storage import get_database, DatabaseInterface
 from ..scraper.nbn23_scraper import NBN23Scraper
+from ..scraper.sportspress_api import SportsPress
 from .. import config
 
 
@@ -30,14 +31,16 @@ class DataService:
         # Get database from factory (respects DB_TYPE env var)
         self.db: DatabaseInterface = get_database()
 
-        # Scraper (lazy initialization)
+        # Scrapers (lazy initialization)
         self._scraper: Optional[NBN23Scraper] = None
+        self._sportspress: Optional[SportsPress] = None
 
         # Scraping state
         self._scrape_lock = threading.Lock()
         self._is_scraping = False
         self._last_scrape_error: Optional[str] = None
         self._executor = ThreadPoolExecutor(max_workers=1)
+        self._shutdown = False
 
     @property
     def scraper(self) -> NBN23Scraper:
@@ -49,6 +52,22 @@ class DataService:
                 database=self.db
             )
         return self._scraper
+
+    @property
+    def sportspress(self) -> SportsPress:
+        """Lazy initialization of SportsPress API client."""
+        if self._sportspress is None:
+            self._sportspress = SportsPress(database=self.db)
+        return self._sportspress
+
+    def shutdown(self) -> None:
+        """
+        Shutdown the data service and cleanup resources.
+        Called during application shutdown.
+        """
+        self._shutdown = True
+        self._executor.shutdown(wait=False, cancel_futures=True)
+        print("[*] DataService shutdown complete")
 
     def get_data(self, force_refresh: bool = False) -> Dict[str, Any]:
         """
@@ -181,6 +200,202 @@ class DataService:
     ) -> List[Dict[str, Any]]:
         """Search for teams by name."""
         return self.db.search_teams(query, season_id=season_id)
+
+    # =========================================================================
+    # SPORTSPRESS PLAYER METHODS
+    # =========================================================================
+
+    def refresh_players(self) -> Dict[str, Any]:
+        """
+        Fetch all players from SportsPress API and save to database.
+
+        Returns:
+            Dictionary with counts and elapsed time
+        """
+        print("[*] Starting player data refresh from SportsPress...")
+        return self.sportspress.scrape_players()
+
+    def refresh_players_async(self) -> bool:
+        """
+        Start a background player data refresh.
+
+        Returns:
+            True if started, False if already running
+        """
+        # Reuse the same lock to prevent concurrent refreshes
+        with self._scrape_lock:
+            if self._is_scraping:
+                return False
+
+        def do_refresh():
+            try:
+                print("[*] Background player refresh started...")
+                self.sportspress.scrape_players()
+                print("[+] Background player refresh completed")
+            except Exception as e:
+                print(f"[!] Background player refresh failed: {e}")
+                import traceback
+                traceback.print_exc()
+
+        self._executor.submit(do_refresh)
+        return True
+
+    def search_players(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Search players by name.
+
+        Args:
+            query: Search query (partial name match)
+            limit: Maximum number of results
+
+        Returns:
+            List of player dictionaries
+        """
+        return self.db.search_players(query, limit=limit)
+
+    def get_player(self, player_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get a single player by ID (minimal data from cache).
+
+        Args:
+            player_id: The player's ID
+
+        Returns:
+            Player dictionary with minimal data, or None
+        """
+        return self.db.get_player(player_id)
+
+    def get_player_with_stats(self, player_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get a single player by ID with full statistics fetched on-demand.
+
+        This method:
+        1. Gets minimal player data from the database
+        2. Fetches full player data (including stats) from SportsPress API
+        3. Enriches with team/league names
+        4. Returns combined data
+
+        Args:
+            player_id: The player's ID
+
+        Returns:
+            Player dictionary with stats and resolved names, or None
+        """
+        # First check if player exists in our cache
+        cached_player = self.db.get_player(player_id)
+        if not cached_player:
+            return None
+
+        # Fetch full player data with stats from API
+        try:
+            full_player = self.sportspress.get_player_stats(player_id)
+            if not full_player:
+                # API failed, return cached data without stats
+                return self._enrich_player(cached_player)
+
+            # Merge API data with enrichment
+            return self._enrich_player(full_player)
+
+        except Exception as e:
+            print(f"[!] Error fetching player stats: {e}")
+            # Return cached data without stats on error
+            return self._enrich_player(cached_player)
+
+    def get_player_leagues(self, player_id: int) -> List[Dict[str, Any]]:
+        """
+        Get all leagues for a player.
+
+        Args:
+            player_id: The player's ID
+
+        Returns:
+            List of league dictionaries with 'id' and 'name'
+        """
+        player = self.db.get_player(player_id)
+        if not player:
+            return []
+
+        league_ids = player.get('leagues', [])
+        all_leagues = self.db.get_sportspress_leagues()
+
+        return [
+            lg for lg in all_leagues
+            if lg['id'] in league_ids
+        ]
+
+    def get_players(
+        self,
+        team_id: Optional[int] = None,
+        league_id: Optional[int] = None,
+        limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get players with optional filters.
+
+        Args:
+            team_id: Filter by team ID
+            league_id: Filter by league ID
+            limit: Maximum number of players
+
+        Returns:
+            List of player dictionaries
+        """
+        return self.db.get_players(team_id=team_id, league_id=league_id, limit=limit)
+
+    def get_sportspress_leagues(self) -> List[Dict[str, Any]]:
+        """Get all SportsPress leagues."""
+        return self.db.get_sportspress_leagues()
+
+    def get_sportspress_teams(self) -> List[Dict[str, Any]]:
+        """Get all SportsPress teams."""
+        return self.db.get_sportspress_teams()
+
+    def _enrich_player(self, player: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Enrich player data with resolved team and league names.
+
+        Handles both minimal format (teams) and full API format (current_teams).
+
+        Args:
+            player: Raw player dictionary from database or API
+
+        Returns:
+            Player dictionary with added _teams, _leagues, _current_teams, _past_teams
+        """
+        # Get all leagues and teams for lookup
+        all_leagues = {lg['id']: lg for lg in self.db.get_sportspress_leagues()}
+        all_teams = {t['id']: t for t in self.db.get_sportspress_teams()}
+
+        # Resolve current teams (handle both 'teams' and 'current_teams')
+        current_team_ids = player.get('teams') or player.get('current_teams', [])
+        current_teams = [
+            all_teams.get(tid, {'id': tid, 'name': f'Team {tid}'})
+            for tid in current_team_ids
+        ]
+
+        # Resolve past teams
+        past_team_ids = player.get('past_teams', [])
+        past_teams = [
+            all_teams.get(tid, {'id': tid, 'name': f'Team {tid}'})
+            for tid in past_team_ids
+        ]
+
+        # Resolve leagues
+        league_ids = player.get('leagues', [])
+        leagues = [
+            all_leagues.get(lid, {'id': lid, 'name': f'League {lid}'})
+            for lid in league_ids
+        ]
+
+        # Add enriched data
+        enriched = {
+            **player,
+            '_current_teams': current_teams,
+            '_past_teams': past_teams,
+            '_leagues': leagues
+        }
+
+        return enriched
 
 
 # CLI entry point for testing

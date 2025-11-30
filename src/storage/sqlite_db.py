@@ -196,6 +196,46 @@ class SQLiteDatabase(DatabaseInterface):
                 CREATE INDEX IF NOT EXISTS idx_matches_away_team ON matches(away_team_name);
                 CREATE INDEX IF NOT EXISTS idx_groups_season ON groups(season_id);
                 CREATE INDEX IF NOT EXISTS idx_competitions_season ON competitions(season_id);
+
+                -- SportsPress Players (minimal data - stats fetched on-demand)
+                CREATE TABLE IF NOT EXISTS sp_players (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    team_ids TEXT,          -- JSON array of current team IDs
+                    league_ids TEXT,        -- JSON array
+                    season_ids TEXT,        -- JSON array
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
+                -- SportsPress Leagues (for ID to name mapping)
+                CREATE TABLE IF NOT EXISTS sp_leagues (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    slug TEXT,
+                    data JSON,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
+                -- SportsPress Teams (for ID to name mapping)
+                CREATE TABLE IF NOT EXISTS sp_teams (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    slug TEXT,
+                    data JSON,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
+                -- SportsPress Seasons (for ID to name mapping)
+                CREATE TABLE IF NOT EXISTS sp_seasons (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    slug TEXT,
+                    data JSON,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
+                -- Player indexes
+                CREATE INDEX IF NOT EXISTS idx_sp_players_name ON sp_players(name);
             ''')
 
             conn.execute(
@@ -566,3 +606,193 @@ class SQLiteDatabase(DatabaseInterface):
         """Reclaim unused space in database file."""
         conn = self._get_connection()
         conn.execute('VACUUM')
+
+    # =========================================================================
+    # SPORTSPRESS PLAYER DATA
+    # =========================================================================
+
+    def save_players(self, players: List[Dict[str, Any]]) -> int:
+        """
+        Save players with minimal data (stats fetched on-demand).
+
+        Expects minimal player dicts with: id, name, teams, leagues, seasons
+        """
+        with self.transaction() as conn:
+            for player in players:
+                player_id = player.get('id')
+                if not player_id:
+                    continue
+
+                # Handle both full API response and minimal data format
+                # Full API has 'title.rendered', minimal has 'name' directly
+                if 'name' in player:
+                    name = player['name']
+                else:
+                    title = player.get('title', {})
+                    name = title.get('rendered', '') if isinstance(title, dict) else str(title)
+
+                # Handle both 'teams' and 'current_teams' for flexibility
+                teams = player.get('teams') or player.get('current_teams', [])
+
+                conn.execute('''
+                    INSERT OR REPLACE INTO sp_players
+                    (id, name, team_ids, league_ids, season_ids)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (
+                    player_id,
+                    name,
+                    json.dumps(teams),
+                    json.dumps(player.get('leagues', [])),
+                    json.dumps(player.get('seasons', []))
+                ))
+
+        return len(players)
+
+    def get_players(
+        self,
+        team_id: Optional[int] = None,
+        league_id: Optional[int] = None,
+        limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get players with optional filters (minimal data)."""
+        query = "SELECT id, name, team_ids, league_ids, season_ids FROM sp_players WHERE 1=1"
+        params: List[Any] = []
+
+        if team_id:
+            # Search in JSON array
+            query += " AND team_ids LIKE ?"
+            params.append(f'%{team_id}%')
+
+        if league_id:
+            query += " AND league_ids LIKE ?"
+            params.append(f'%{league_id}%')
+
+        query += " ORDER BY name"
+
+        if limit:
+            query += " LIMIT ?"
+            params.append(limit)
+
+        conn = self._get_connection()
+        rows = conn.execute(query, params).fetchall()
+        return [self._row_to_player(row) for row in rows]
+
+    def search_players(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Search players by name (returns minimal data).
+
+        Splits query into words and matches ALL words in any order.
+        Example: "יוסי כהן" matches "יוסי כהן", "כהן יוסי", "יוסי דוד כהן"
+        """
+        conn = self._get_connection()
+
+        # Split query into words and require all words to match
+        words = query.strip().split()
+
+        if not words:
+            return []
+
+        # Build WHERE clause - each word must appear somewhere in the name
+        conditions = ' AND '.join(['name LIKE ?' for _ in words])
+        params = [f'%{word}%' for word in words]
+        params.append(limit)
+
+        rows = conn.execute(
+            f'SELECT id, name, team_ids, league_ids, season_ids FROM sp_players WHERE {conditions} ORDER BY name LIMIT ?',
+            params
+        ).fetchall()
+        return [self._row_to_player(row) for row in rows]
+
+    def get_player(self, player_id: int) -> Optional[Dict[str, Any]]:
+        """Get a single player by ID (minimal data - no stats)."""
+        conn = self._get_connection()
+        row = conn.execute(
+            'SELECT id, name, team_ids, league_ids, season_ids FROM sp_players WHERE id = ?',
+            (player_id,)
+        ).fetchone()
+        return self._row_to_player(row) if row else None
+
+    def _row_to_player(self, row: sqlite3.Row) -> Dict[str, Any]:
+        """Convert database row to player dict."""
+        return {
+            'id': row['id'],
+            'name': row['name'],
+            'teams': json.loads(row['team_ids'] or '[]'),
+            'leagues': json.loads(row['league_ids'] or '[]'),
+            'seasons': json.loads(row['season_ids'] or '[]')
+        }
+
+    def save_sportspress_leagues(self, leagues: List[Dict[str, Any]]) -> int:
+        """Save SportsPress leagues."""
+        with self.transaction() as conn:
+            conn.executemany('''
+                INSERT OR REPLACE INTO sp_leagues (id, name, slug, data)
+                VALUES (?, ?, ?, ?)
+            ''', [
+                (
+                    lg.get('id'),
+                    lg.get('name', ''),
+                    lg.get('slug', ''),
+                    json.dumps(lg, ensure_ascii=False)
+                )
+                for lg in leagues if lg.get('id')
+            ])
+        return len(leagues)
+
+    def save_sportspress_teams(self, teams: List[Dict[str, Any]]) -> int:
+        """Save SportsPress teams."""
+        with self.transaction() as conn:
+            conn.executemany('''
+                INSERT OR REPLACE INTO sp_teams (id, name, slug, data)
+                VALUES (?, ?, ?, ?)
+            ''', [
+                (
+                    t.get('id'),
+                    t.get('name', ''),
+                    t.get('slug', ''),
+                    json.dumps(t, ensure_ascii=False)
+                )
+                for t in teams if t.get('id')
+            ])
+        return len(teams)
+
+    def save_sportspress_seasons(self, seasons: List[Dict[str, Any]]) -> int:
+        """Save SportsPress seasons."""
+        with self.transaction() as conn:
+            conn.executemany('''
+                INSERT OR REPLACE INTO sp_seasons (id, name, slug, data)
+                VALUES (?, ?, ?, ?)
+            ''', [
+                (
+                    s.get('id'),
+                    s.get('name', ''),
+                    s.get('slug', ''),
+                    json.dumps(s, ensure_ascii=False)
+                )
+                for s in seasons if s.get('id')
+            ])
+        return len(seasons)
+
+    def get_sportspress_leagues(self) -> List[Dict[str, Any]]:
+        """Get all SportsPress leagues."""
+        conn = self._get_connection()
+        rows = conn.execute(
+            'SELECT id, name, slug FROM sp_leagues ORDER BY name'
+        ).fetchall()
+        return [{'id': r['id'], 'name': r['name'], 'slug': r['slug']} for r in rows]
+
+    def get_sportspress_teams(self) -> List[Dict[str, Any]]:
+        """Get all SportsPress teams."""
+        conn = self._get_connection()
+        rows = conn.execute(
+            'SELECT id, name, slug FROM sp_teams ORDER BY name'
+        ).fetchall()
+        return [{'id': r['id'], 'name': r['name'], 'slug': r['slug']} for r in rows]
+
+    def get_sportspress_seasons(self) -> List[Dict[str, Any]]:
+        """Get all SportsPress seasons."""
+        conn = self._get_connection()
+        rows = conn.execute(
+            'SELECT id, name, slug FROM sp_seasons ORDER BY name DESC'
+        ).fetchall()
+        return [{'id': r['id'], 'name': r['name'], 'slug': r['slug']} for r in rows]

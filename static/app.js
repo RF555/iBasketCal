@@ -68,6 +68,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadInitialData();
     setupEventListeners();
     updateStepStates();
+
+    // Initialize tabs and player search (after i18next is ready)
+    initTabs();
+    initPlayerSearch();
 });
 
 // Listen for language changes to update dynamic content
@@ -95,6 +99,12 @@ window.addEventListener('languageChanged', () => {
     // Update cache status
     if (lastCacheInfo) {
         updateCacheStatus(lastCacheInfo);
+    }
+
+    // Update player search placeholder
+    const playerSearchInput = document.getElementById('player-search');
+    if (playerSearchInput) {
+        playerSearchInput.placeholder = t('player.placeholder');
     }
 });
 
@@ -721,3 +731,468 @@ function showToast(message, type = 'info') {
         elements.toast.className = 'toast';
     }, 3000);
 }
+
+// ============================================
+// TAB NAVIGATION
+// ============================================
+
+// Initialize tabs
+function initTabs() {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    tabButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabId = btn.dataset.tab;
+            switchTab(tabId);
+        });
+    });
+}
+
+// Switch to a specific tab
+function switchTab(tabId) {
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabId);
+    });
+
+    // Update tab panels
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.toggle('active', panel.id === `${tabId}-tab`);
+    });
+}
+
+// ============================================
+// PLAYER SEARCH
+// ============================================
+
+// Player state
+let playerState = {
+    searchTimeout: null,
+    currentPlayer: null,
+    spLeagues: {},  // SportsPress leagues lookup
+    spTeams: {}     // SportsPress teams lookup
+};
+
+// Player DOM elements (lazy init)
+let playerElements = null;
+
+function getPlayerElements() {
+    if (!playerElements) {
+        playerElements = {
+            searchInput: document.getElementById('player-search'),
+            suggestions: document.getElementById('player-suggestions'),
+            details: document.getElementById('player-details'),
+            playerName: document.getElementById('player-name'),
+            currentTeams: document.getElementById('player-current-teams'),
+            pastTeams: document.getElementById('player-past-teams'),
+            leaguesList: document.getElementById('player-leagues-list'),
+            statsSeasonSelect: document.getElementById('stats-season-select'),
+            statsBody: document.getElementById('player-stats-body'),
+            noStatsMessage: document.getElementById('no-stats-message'),
+            refreshPlayersBtn: document.getElementById('refresh-players-btn'),
+            modal: document.getElementById('calendar-modal'),
+            modalTitle: document.getElementById('modal-title'),
+            modalTeamName: document.getElementById('modal-team-name'),
+            modalGoogleLink: document.getElementById('modal-google-link'),
+            modalAppleLink: document.getElementById('modal-apple-link'),
+            modalDownloadLink: document.getElementById('modal-download-link')
+        };
+    }
+    return playerElements;
+}
+
+// Initialize player search functionality
+function initPlayerSearch() {
+    const el = getPlayerElements();
+    if (!el.searchInput) return;
+
+    // Search input with debounce
+    el.searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+
+        // Clear previous timeout
+        if (playerState.searchTimeout) {
+            clearTimeout(playerState.searchTimeout);
+        }
+
+        // Hide suggestions if query is too short
+        if (query.length < 2) {
+            el.suggestions.classList.remove('show');
+            return;
+        }
+
+        // Debounce search
+        playerState.searchTimeout = setTimeout(() => {
+            searchPlayers(query);
+        }, 300);
+    });
+
+    // Close suggestions when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!el.searchInput.contains(e.target) && !el.suggestions.contains(e.target)) {
+            el.suggestions.classList.remove('show');
+        }
+    });
+
+    // Stats season selector change
+    el.statsSeasonSelect.addEventListener('change', () => {
+        if (playerState.currentPlayer) {
+            displayPlayerStatistics(playerState.currentPlayer.statistics);
+        }
+    });
+
+    // Refresh players button
+    el.refreshPlayersBtn.addEventListener('click', refreshPlayerData);
+
+    // Set placeholder
+    el.searchInput.placeholder = t('player.placeholder');
+}
+
+// Search for players
+async function searchPlayers(query) {
+    const el = getPlayerElements();
+
+    try {
+        const players = await fetchAPI(`/api/players?q=${encodeURIComponent(query)}&limit=20`);
+
+        if (players.length === 0) {
+            el.suggestions.innerHTML = `<div class="no-results">${t('player.noResults')}</div>`;
+            el.suggestions.classList.add('show');
+            return;
+        }
+
+        el.suggestions.innerHTML = players.map(player => {
+            const teamsText = player.current_teams?.length
+                ? `${player.current_teams.length} ${t('player.teams').toLowerCase()}`
+                : '';
+
+            return `
+                <div class="suggestion-item" onclick="selectPlayer(${player.id})">
+                    <div class="player-name">${escapeHtml(player.name)}</div>
+                    ${teamsText ? `<div class="player-teams">${teamsText}</div>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        el.suggestions.classList.add('show');
+
+    } catch (error) {
+        console.error('Error searching players:', error);
+        el.suggestions.innerHTML = `<div class="no-results">${t('toast.loadError')}</div>`;
+        el.suggestions.classList.add('show');
+    }
+}
+
+// Select a player
+async function selectPlayer(playerId) {
+    const el = getPlayerElements();
+
+    // Hide suggestions
+    el.suggestions.classList.remove('show');
+    el.searchInput.value = '';
+
+    // Show loading state with spinner
+    el.details.classList.remove('hidden');
+    el.playerName.textContent = t('player.loading');
+    el.currentTeams.innerHTML = '<p class="loading-spinner">⏳</p>';
+    el.pastTeams.innerHTML = '<p class="loading-spinner">⏳</p>';
+    el.leaguesList.innerHTML = '<li class="loading-spinner">⏳</li>';
+    el.statsBody.innerHTML = '<tr><td colspan="9" class="loading-spinner">⏳ ' + t('player.loadingStats') + '</td></tr>';
+    el.noStatsMessage.classList.add('hidden');
+
+    try {
+        // Load SP lookup data if not already loaded (for stats display)
+        await loadSPLookupData();
+
+        // Fetch player details with stats (on-demand from SportsPress API)
+        // This may take 1-2 seconds as it fetches fresh stats
+        const player = await fetchAPI(`/api/players/${playerId}`, { timeout: 15000 });
+        playerState.currentPlayer = player;
+
+        displayPlayerDetails(player);
+
+    } catch (error) {
+        console.error('Error loading player:', error);
+        el.playerName.textContent = t('toast.loadError');
+        el.currentTeams.innerHTML = '';
+        el.pastTeams.innerHTML = '';
+        el.leaguesList.innerHTML = '';
+        el.statsBody.innerHTML = '';
+        el.noStatsMessage.textContent = t('player.statsUnavailable');
+        el.noStatsMessage.classList.remove('hidden');
+    }
+}
+
+// Load SportsPress lookup data (teams and leagues)
+async function loadSPLookupData() {
+    if (Object.keys(playerState.spLeagues).length === 0) {
+        const leagues = await fetchAPI('/api/sp-leagues');
+        leagues.forEach(lg => {
+            playerState.spLeagues[lg.id] = lg;
+        });
+    }
+
+    if (Object.keys(playerState.spTeams).length === 0) {
+        const teams = await fetchAPI('/api/sp-teams');
+        teams.forEach(t => {
+            playerState.spTeams[t.id] = t;
+        });
+    }
+}
+
+// Display player details
+function displayPlayerDetails(player) {
+    const el = getPlayerElements();
+
+    // Get player name
+    const name = player.title?.rendered || player.name || 'Unknown';
+    el.playerName.textContent = name;
+
+    // Display teams
+    displayPlayerTeams(player);
+
+    // Display leagues
+    displayPlayerLeagues(player);
+
+    // Display statistics
+    populateStatsSeasonSelector(player.statistics);
+    displayPlayerStatistics(player.statistics);
+}
+
+// Display player teams
+function displayPlayerTeams(player) {
+    const el = getPlayerElements();
+
+    // Current teams - use pre-resolved _current_teams from API
+    const currentTeams = player._current_teams || [];
+    if (currentTeams.length > 0) {
+        el.currentTeams.innerHTML = currentTeams.map(team => {
+            return createTeamCard(team);
+        }).join('');
+    } else {
+        el.currentTeams.innerHTML = `<p class="no-teams">${t('player.noTeams')}</p>`;
+    }
+
+    // Past teams - use pre-resolved _past_teams from API
+    const pastTeams = player._past_teams || [];
+    if (pastTeams.length > 0) {
+        el.pastTeams.innerHTML = pastTeams.map(team => {
+            return createTeamCard(team);
+        }).join('');
+    } else {
+        el.pastTeams.innerHTML = `<p class="no-teams">${t('player.noTeams')}</p>`;
+    }
+}
+
+// Create a team card HTML
+function createTeamCard(team) {
+    return `
+        <div class="team-card">
+            <div class="team-info">
+                <span class="team-name">${escapeHtml(team.name)}</span>
+            </div>
+            <button class="btn btn-primary btn-subscribe" onclick="openCalendarModal('${escapeHtml(team.name)}')">
+                ${t('player.subscribeTeam')}
+            </button>
+        </div>
+    `;
+}
+
+// Display player leagues
+function displayPlayerLeagues(player) {
+    const el = getPlayerElements();
+
+    // Use pre-resolved _leagues from API
+    const leagues = player._leagues || [];
+    if (leagues.length > 0) {
+        el.leaguesList.innerHTML = leagues.map(league => {
+            return `<li>${escapeHtml(league.name)}</li>`;
+        }).join('');
+    } else {
+        el.leaguesList.innerHTML = `<li class="no-teams">${t('player.noTeams')}</li>`;
+    }
+}
+
+// Populate stats season selector
+function populateStatsSeasonSelector(statistics) {
+    const el = getPlayerElements();
+
+    if (!statistics || Object.keys(statistics).length === 0) {
+        el.statsSeasonSelect.innerHTML = `<option value="">-</option>`;
+        return;
+    }
+
+    // Get all unique league-season combinations
+    const options = [];
+
+    Object.entries(statistics).forEach(([leagueId, seasonData]) => {
+        const league = playerState.spLeagues[leagueId] || { name: `League ${leagueId}` };
+
+        Object.keys(seasonData).forEach(seasonKey => {
+            // Skip special keys
+            if (seasonKey === '0' || seasonKey === '-1') return;
+
+            options.push({
+                value: `${leagueId}:${seasonKey}`,
+                label: league.name
+            });
+        });
+    });
+
+    if (options.length === 0) {
+        el.statsSeasonSelect.innerHTML = `<option value="">-</option>`;
+        return;
+    }
+
+    el.statsSeasonSelect.innerHTML = options.map((opt, idx) =>
+        `<option value="${opt.value}" ${idx === 0 ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`
+    ).join('');
+}
+
+// Display player statistics
+function displayPlayerStatistics(statistics) {
+    const el = getPlayerElements();
+
+    if (!statistics || Object.keys(statistics).length === 0) {
+        el.statsBody.innerHTML = '';
+        el.noStatsMessage.classList.remove('hidden');
+        return;
+    }
+
+    // Get selected league:season
+    const selected = el.statsSeasonSelect.value;
+    if (!selected) {
+        el.statsBody.innerHTML = '';
+        el.noStatsMessage.classList.remove('hidden');
+        return;
+    }
+
+    const [leagueId, seasonKey] = selected.split(':');
+    const seasonData = statistics[leagueId]?.[seasonKey];
+
+    if (!seasonData) {
+        el.statsBody.innerHTML = '';
+        el.noStatsMessage.classList.remove('hidden');
+        return;
+    }
+
+    el.noStatsMessage.classList.add('hidden');
+
+    // Extract stats (handling both number and string values)
+    const getValue = (key) => {
+        const val = seasonData[key];
+        if (val === undefined || val === null || val === '') return '-';
+        return val;
+    };
+
+    // Calculate total rebounds
+    const rebOff = parseInt(seasonData.off) || 0;
+    const rebDef = parseInt(seasonData.def) || 0;
+    const totalReb = rebOff + rebDef || getValue('reb');
+
+    el.statsBody.innerHTML = `
+        <tr>
+            <td>${getValue('g')}</td>
+            <td>${getValue('mins')}</td>
+            <td>${getValue('pts')}</td>
+            <td>${totalReb}</td>
+            <td>${getValue('ast')}</td>
+            <td>${getValue('stl')}</td>
+            <td>${getValue('blk')}</td>
+            <td>${getValue('to')}</td>
+            <td>${getValue('eff')}</td>
+        </tr>
+    `;
+}
+
+// Refresh player data
+async function refreshPlayerData() {
+    const el = getPlayerElements();
+
+    el.refreshPlayersBtn.disabled = true;
+    el.refreshPlayersBtn.textContent = t('player.refreshing');
+
+    try {
+        const response = await fetch(API_BASE + '/api/players/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await response.json();
+
+        if (result.status === 'started') {
+            showToast(t('toast.refreshStarted'), 'info');
+        } else if (result.status === 'in_progress') {
+            showToast(t('toast.refreshInProgress'), 'info');
+        }
+
+        // Clear cached lookup data
+        playerState.spLeagues = {};
+        playerState.spTeams = {};
+
+    } catch (error) {
+        console.error('Error refreshing player data:', error);
+        showToast(t('toast.refreshError'), 'error');
+    } finally {
+        el.refreshPlayersBtn.disabled = false;
+        el.refreshPlayersBtn.textContent = t('player.refresh');
+    }
+}
+
+// ============================================
+// CALENDAR SUBSCRIPTION MODAL
+// ============================================
+
+// Open calendar subscription modal
+function openCalendarModal(teamName) {
+    const el = getPlayerElements();
+
+    el.modalTitle.textContent = t('player.subscribeTitle', { team: teamName });
+    el.modalTeamName.textContent = teamName;
+
+    // Generate calendar URL for this team
+    const baseUrl = window.location.origin;
+    const calendarPath = `/calendar.ics?team=${encodeURIComponent(teamName)}`;
+    const fullUrl = `${baseUrl}${calendarPath}`;
+    const webcalUrl = fullUrl.replace(/^https?:\/\//, 'webcal://');
+
+    // Set up links
+    el.modalGoogleLink.href = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcalUrl)}`;
+    el.modalAppleLink.href = webcalUrl;
+    el.modalDownloadLink.href = calendarPath;
+
+    // Show modal
+    el.modal.classList.remove('hidden');
+}
+
+// Close calendar subscription modal
+function closeCalendarModal() {
+    const el = getPlayerElements();
+    el.modal.classList.add('hidden');
+}
+
+// Close modal when clicking outside
+document.addEventListener('click', (e) => {
+    const modal = document.getElementById('calendar-modal');
+    if (modal && e.target === modal) {
+        closeCalendarModal();
+    }
+});
+
+// Close modal with Escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeCalendarModal();
+    }
+});
+
+// ============================================
+// UTILITY FUNCTIONS
+// ============================================
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+

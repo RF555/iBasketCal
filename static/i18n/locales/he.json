@@ -9,6 +9,10 @@
   "lang": {
     "switcher": "English"
   },
+  "tabs": {
+    "calendar": "לוח שנה",
+    "players": "שחקנים"
+  },
   "filters": {
     "title": "בחר סינון",
     "season": {
@@ -85,5 +89,43 @@
     "timeout": "הבקשה נכשלה - תם הזמן. נסה שוב.",
     "rateLimited": "נא להמתין {{seconds}} שניות לפני רענון נוסף.",
     "refreshTimeout": "הרענון לוקח יותר מדי זמן. נסה שוב מאוחר יותר."
+  },
+  "player": {
+    "title": "חיפוש שחקן",
+    "placeholder": "הקלד שם שחקן...",
+    "searchHint": "חפש שחקן כדי לראות את הקבוצות והסטטיסטיקה שלו",
+    "noResults": "לא נמצאו שחקנים",
+    "teams": "קבוצות",
+    "currentTeams": "קבוצות נוכחיות",
+    "pastTeams": "קבוצות קודמות",
+    "leagues": "ליגות",
+    "loading": "טוען שחקן...",
+    "loadingStats": "טוען סטטיסטיקה...",
+    "statsUnavailable": "לא ניתן לטעון סטטיסטיקה. נסה שוב מאוחר יותר.",
+    "subscribeTeam": "הרשמה ללוח שנה",
+    "subscribeTitle": "הרשמה ללוח שנה של {{team}}",
+    "refresh": "רענן נתוני שחקנים",
+    "refreshing": "מרענן...",
+    "noTeams": "אין קבוצות"
+  },
+  "stats": {
+    "title": "סטטיסטיקה",
+    "season": "עונה",
+    "games": "משחקים",
+    "minutes": "דקות",
+    "points": "נקודות",
+    "rebounds": "ריבאונדים",
+    "reboundsOff": "ריב. התקפה",
+    "reboundsDef": "ריב. הגנה",
+    "assists": "אסיסטים",
+    "steals": "חטיפות",
+    "blocks": "חסימות",
+    "turnovers": "אובדנים",
+    "fouls": "עבירות",
+    "efficiency": "יעילות",
+    "fg2": "קליעות 2",
+    "fg3": "קליעות 3",
+    "ft": "זריקות חופשיות",
+    "noStats": "אין סטטיסטיקה זמינה"
   }
 }
