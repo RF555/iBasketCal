@@ -59,6 +59,9 @@ class SportsPress:
         })
         self._current_season_id: Optional[int] = None
 
+    # Sentinel value to indicate pagination should stop (e.g., 400 Bad Request)
+    END_OF_PAGINATION = "END_OF_PAGINATION"
+
     def _api_request(
         self,
         endpoint: str,
@@ -70,6 +73,7 @@ class SportsPress:
 
         Uses exponential backoff (2s, 4s, 8s, 16s, 32s) between retries.
         Returns None on failure to distinguish from empty response ([]).
+        Returns END_OF_PAGINATION sentinel for 400 errors (page out of range).
 
         Args:
             endpoint: API endpoint (e.g., 'players', 'teams')
@@ -77,7 +81,8 @@ class SportsPress:
             timeout: Request timeout in seconds
 
         Returns:
-            JSON response data (list or dict), or None if all retries failed
+            JSON response data (list or dict), None if retries failed,
+            or END_OF_PAGINATION if page is out of range (400 error)
         """
         url = f"{self.BASE_URL}/{endpoint}"
 
@@ -86,6 +91,19 @@ class SportsPress:
                 response = self.session.get(url, params=params, timeout=timeout)
                 response.raise_for_status()
                 return response.json()
+            except requests.HTTPError as e:
+                # 400 Bad Request means page is out of range - stop pagination
+                if response.status_code == 400:
+                    print(f"[*] Page out of range for {endpoint} (400 Bad Request)")
+                    return self.END_OF_PAGINATION
+                # Other HTTP errors - retry
+                if attempt < self.MAX_RETRIES - 1:
+                    wait_time = self.BASE_BACKOFF_SECONDS ** attempt
+                    print(f"[!] API request failed for {endpoint}, retry {attempt + 1}/{self.MAX_RETRIES} in {wait_time}s... ({e})")
+                    time.sleep(wait_time)
+                else:
+                    print(f"[!] API request failed for {endpoint} after {self.MAX_RETRIES} retries: {e}")
+                    return None
             except requests.RequestException as e:
                 if attempt < self.MAX_RETRIES - 1:
                     wait_time = self.BASE_BACKOFF_SECONDS ** attempt
@@ -234,6 +252,11 @@ class SportsPress:
                 params["seasons"] = season_id
 
             players = self._api_request("players", params)
+
+            # Handle end of pagination (400 Bad Request = page out of range)
+            if players == self.END_OF_PAGINATION:
+                print(f"    [+] Reached end of pagination at page {page}")
+                break
 
             # Handle failed request (None) vs empty response ([])
             if players is None:
