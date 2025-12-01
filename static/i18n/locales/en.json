@@ -79,7 +79,7 @@
   "toast": {
     "copied": "URL copied!",
     "refreshInProgress": "Refresh already in progress, please wait...",
-    "refreshStarted": "Data refresh started. This may take 1-2 minutes...",
+    "refreshStarted": "Data refresh started. This may take 20-30 minutes...",
     "refreshSuccess": "Data updated!",
     "loadError": "Error loading data",
     "leagueError": "Error loading leagues",

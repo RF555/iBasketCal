@@ -14,7 +14,7 @@ Data Strategy:
 
 import requests
 import time
-from typing import Optional, List, Dict, Any, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..storage.base import DatabaseInterface
@@ -37,6 +37,13 @@ class SportsPress:
     # Current season ID (2025-2026)
     CURRENT_SEASON_ID = 119472
 
+    # Safety limit for pagination to prevent infinite loops
+    MAX_PAGES = 600
+
+    # Retry configuration
+    MAX_RETRIES = 5
+    BASE_BACKOFF_SECONDS = 2  # Exponential: 2, 4, 8, 16, 32 seconds
+
     def __init__(self, database: Optional["DatabaseInterface"] = None):
         """
         Initialize the SportsPress API client.
@@ -56,35 +63,37 @@ class SportsPress:
         self,
         endpoint: str,
         params: Optional[Dict] = None,
-        retry_count: int = 3,
         timeout: int = 60
-    ) -> Any:
+    ) -> Optional[Any]:
         """
         Make an API request with retry logic.
+
+        Uses exponential backoff (2s, 4s, 8s, 16s, 32s) between retries.
+        Returns None on failure to distinguish from empty response ([]).
 
         Args:
             endpoint: API endpoint (e.g., 'players', 'teams')
             params: Query parameters
-            retry_count: Number of retries on failure
             timeout: Request timeout in seconds
 
         Returns:
-            JSON response data (list or dict)
+            JSON response data (list or dict), or None if all retries failed
         """
         url = f"{self.BASE_URL}/{endpoint}"
 
-        for attempt in range(retry_count):
+        for attempt in range(self.MAX_RETRIES):
             try:
                 response = self.session.get(url, params=params, timeout=timeout)
                 response.raise_for_status()
                 return response.json()
             except requests.RequestException as e:
-                if attempt < retry_count - 1:
-                    print(f"[!] API request failed for {endpoint}, retrying... ({e})")
-                    time.sleep(1 * (attempt + 1))  # Exponential backoff
+                if attempt < self.MAX_RETRIES - 1:
+                    wait_time = self.BASE_BACKOFF_SECONDS ** attempt
+                    print(f"[!] API request failed for {endpoint}, retry {attempt + 1}/{self.MAX_RETRIES} in {wait_time}s... ({e})")
+                    time.sleep(wait_time)
                 else:
-                    print(f"[!] API request failed for {endpoint}: {e}")
-                    return [] if endpoint in ['players', 'teams', 'leagues', 'seasons'] else {}
+                    print(f"[!] API request failed for {endpoint} after {self.MAX_RETRIES} retries: {e}")
+                    return None  # Distinguish from empty response
 
     def get_current_season_id(self) -> int:
         """
@@ -188,17 +197,22 @@ class SportsPress:
         season_id: Optional[int] = None,
         per_page: int = 100,
         minimal: bool = True
-    ) -> List[Dict[str, Any]]:
+    ) -> Tuple[List[Dict[str, Any]], List[int]]:
         """
         Fetch all players with pagination, optionally filtered by season.
 
+        Note: WordPress REST API returns variable results per page (typically 10-25),
+        regardless of the per_page parameter. The per_page value is a MAXIMUM, not
+        a guaranteed count. Pagination continues until an empty response is received
+        or MAX_PAGES is reached.
+
         Args:
             season_id: Optional season ID to filter players
-            per_page: Number of players per page (max 100)
+            per_page: Maximum players per page (API may return fewer)
             minimal: If True, extract only minimal data (default True)
 
         Returns:
-            List of player dictionaries (minimal or full based on flag)
+            Tuple of (list of player dicts, list of failed page numbers)
         """
         if season_id:
             print(f"[*] Fetching players for season {season_id}...")
@@ -206,6 +220,7 @@ class SportsPress:
             print("[*] Fetching all players from SportsPress API...")
 
         all_players = []
+        failed_pages = []
         page = 1
 
         while True:
@@ -220,7 +235,15 @@ class SportsPress:
 
             players = self._api_request("players", params)
 
+            # Handle failed request (None) vs empty response ([])
+            if players is None:
+                print(f"    [!] Page {page} failed after all retries, continuing...")
+                failed_pages.append(page)
+                page += 1
+                continue
+
             if not players:
+                print(f"    [+] No more players found, stopping at page {page}")
                 break
 
             # Extract minimal data if requested
@@ -228,19 +251,28 @@ class SportsPress:
                 players = [self._extract_minimal_player(p) for p in players]
 
             all_players.extend(players)
-            print(f"    [+] Got {len(players)} players (total: {len(all_players)})")
 
-            # If we got fewer than per_page, we've reached the end
-            if len(players) < per_page:
+            # Progress logging every 50 pages
+            if page % 50 == 0:
+                print(f"    [*] Progress: {len(all_players)} players fetched so far...")
+            else:
+                print(f"    [+] Got {len(players)} players (total: {len(all_players)})")
+
+            # Safety limit to prevent infinite loops
+            if page >= self.MAX_PAGES:
+                print(f"    [!] Reached max pages limit ({self.MAX_PAGES}), stopping")
                 break
 
             page += 1
             time.sleep(0.1)  # Rate limiting
 
-        print(f"[+] Total players fetched: {len(all_players)}")
-        return all_players
+        print(f"[+] Total players fetched: {len(all_players)} from {page} pages")
+        if failed_pages:
+            print(f"[!] Warning: {len(failed_pages)} pages failed: {failed_pages}")
 
-    def get_player(self, player_id: int) -> Dict[str, Any]:
+        return all_players, failed_pages
+
+    def get_player(self, player_id: int) -> Optional[Dict[str, Any]]:
         """
         Fetch a single player by ID.
 
@@ -248,7 +280,7 @@ class SportsPress:
             player_id: The player's ID
 
         Returns:
-            Player dictionary with full details
+            Player dictionary with full details, or None if not found/failed
         """
         return self._api_request(f"players/{player_id}")
 
@@ -338,9 +370,10 @@ class SportsPress:
         - Only fetches players from the current season
         - Stores minimal data (id, name, teams, leagues, seasons)
         - Skips fetching all leagues/teams (reduces API calls significantly)
+        - Deduplicates by player ID before saving (API may return duplicates)
 
         Returns:
-            Dictionary with 'players', 'season_id', 'elapsed' keys
+            Dictionary with 'players', 'season_id', 'elapsed', 'failed_pages' keys
         """
         print("[*] Starting SportsPress player data fetch (minimal mode)...")
         start_time = time.time()
@@ -349,23 +382,39 @@ class SportsPress:
         season_id = self.get_current_season_id()
 
         # Fetch only players from current season with minimal data
-        players = self.get_all_players(season_id=season_id, minimal=True)
+        players, failed_pages = self.get_all_players(season_id=season_id, minimal=True)
+
+        # Deduplicate by player ID (API may return same player on multiple pages)
+        seen_ids = set()
+        unique_players = []
+        for p in players:
+            if p['id'] not in seen_ids:
+                seen_ids.add(p['id'])
+                unique_players.append(p)
+
+        duplicates_removed = len(players) - len(unique_players)
+        if duplicates_removed > 0:
+            print(f"[*] Removed {duplicates_removed} duplicate player IDs")
 
         # Save to database if available
         if self.db:
             print("[*] Saving players to database...")
-            self.db.save_players(players)
+            self.db.save_players(unique_players)
             print("[+] Players saved to database")
 
         elapsed = time.time() - start_time
         print(f"[+] SportsPress scrape complete in {elapsed:.1f}s")
         print(f"    Season: {season_id}")
-        print(f"    Players: {len(players)}")
+        print(f"    Players: {len(unique_players)} (after dedup)")
+        if failed_pages:
+            print(f"    Failed pages: {failed_pages}")
 
         return {
-            'players': players,
+            'players': unique_players,
             'season_id': season_id,
-            'elapsed': elapsed
+            'elapsed': elapsed,
+            'failed_pages': failed_pages,
+            'duplicates_removed': duplicates_removed
         }
 
 
