@@ -468,7 +468,8 @@ function displayMatches(matches) {
         if (match.status === 'CLOSED' && match.score?.totals) {
             const homeScore = getScore(match, 'home');
             const awayScore = getScore(match, 'away');
-            teams = `${home} ${homeScore}-${awayScore} ${away}`;
+            // Use explicit score labels to avoid RTL confusion
+            teams = `${home} (${homeScore}) ${t('match.versus')} ${away} (${awayScore})`;
         }
 
         return `

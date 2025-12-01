@@ -1,6 +1,9 @@
 # Render Blueprint
 # https://render.com
 # Deploy: Connect GitHub repo, Render auto-detects this file
+#
+# This configuration uses Supabase as the database backend.
+# No persistent disk needed - data is stored in Supabase cloud.
 
 services:
   - type: web
@@ -10,9 +13,28 @@ services:
     plan: starter  # $7/mo, or use 'free' (spins down after 15min inactivity)
     healthCheckPath: /health
     envVars:
+      # Core settings
       - key: PYTHONUNBUFFERED
         value: "1"
-    disk:
-      name: basketball-data
-      mountPath: /app/cache
-      sizeGB: 1  # 1GB is enough for ~20MB database
+      - key: PORT
+        value: "8000"
+
+      # Database configuration - Supabase
+      - key: DB_TYPE
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false  # Set in Render dashboard
+      - key: SUPABASE_KEY
+        sync: false  # Set in Render dashboard
+
+      # Scraper settings
+      - key: SCRAPER_HEADLESS
+        value: "true"
+      - key: CACHE_TTL_MINUTES
+        value: "10080"  # 7 days
+      - key: REFRESH_COOLDOWN_SECONDS
+        value: "300"  # 5 minutes
+
+      # Logging
+      - key: LOG_LEVEL
+        value: "INFO"

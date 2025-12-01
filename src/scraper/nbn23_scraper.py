@@ -16,7 +16,7 @@ from typing import Optional, Union, Dict, List, Any, TYPE_CHECKING
 import time
 
 if TYPE_CHECKING:
-    from ..storage.database import Database
+    from ..storage.base import DatabaseInterface
 
 
 class NBN23Scraper:
@@ -37,7 +37,7 @@ class NBN23Scraper:
         self,
         headless: bool = True,
         cache_dir: str = "cache",
-        database: Optional["Database"] = None
+        database: Optional["DatabaseInterface"] = None
     ):
         self.headless = headless
         self.cache_dir = Path(cache_dir)
@@ -282,9 +282,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Import database for CLI usage
-    from ..storage.database import get_database
+    from ..storage import get_database
 
-    db = get_database(f"{args.cache_dir}/basketball.db")
+    db = get_database()
     scraper = NBN23Scraper(
         headless=args.headless,
         cache_dir=args.cache_dir,

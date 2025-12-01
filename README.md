@@ -206,8 +206,13 @@ iBasketCal/
 │   │   ├── data_service.py        # Data access layer
 │   │   └── calendar_service.py    # ICS calendar generation
 │   └── storage/
-│       ├── __init__.py
-│       └── database.py            # SQLite database module
+│       ├── __init__.py            # Database interface exports
+│       ├── base.py                # Abstract DatabaseInterface
+│       ├── factory.py             # Database factory (singleton)
+│       ├── exceptions.py          # Custom storage exceptions
+│       ├── sqlite_db.py           # SQLite implementation (default)
+│       ├── turso_db.py            # Turso cloud implementation
+│       └── supabase_db.py         # Supabase implementation
 ├── static/
 │   ├── index.html                 # Bilingual web UI (English default)
 │   ├── style.css                  # Styling with RTL/LTR support
@@ -219,8 +224,11 @@ iBasketCal/
 │           └── he.json            # Hebrew translations
 ├── cache/                         # SQLite database storage
 │   └── basketball.db              # Main database file
+├── scripts/
+│   └── supabase_schema.sql        # Supabase migration script
 ├── tests/
-│   └── __init__.py
+│   ├── __init__.py
+│   └── test_storage.py            # Storage layer tests
 ├── Dockerfile
 ├── docker-compose.yml
 ├── setup.py                       # Setup script
@@ -313,6 +321,7 @@ LOG_LEVEL=INFO
 |----------|-------------|---------|
 | `PORT` | Server port | `8000` |
 | `HOST` | Server host | `0.0.0.0` |
+| `DB_TYPE` | Database backend (`sqlite`, `turso`, `supabase`) | `sqlite` |
 | `DATA_DIR` | Directory for SQLite database | `cache/` (local) or `/app/cache` (container) |
 | `RAILWAY_VOLUME_MOUNT_PATH` | Auto-set by Railway for volume mount | - |
 | `SCRAPER_HEADLESS` | Run browser in headless mode | `true` |
@@ -332,6 +341,99 @@ For Railway deployment with persistent storage:
 The app automatically uses the volume for SQLite database storage, ensuring data persists across deployments.
 
 **Important Docker Note:** Playwright browsers must be installed as the runtime user, not as root. The Dockerfile installs browsers after switching to `appuser` to ensure they're accessible at runtime.
+
+### Render + Supabase Deployment (Recommended for Cloud)
+
+Deploy to Render using Supabase as the database backend. This eliminates the need for persistent disk storage.
+
+#### Step 1: Create Supabase Project
+
+1. Go to [supabase.com](https://supabase.com) and create a new project
+2. Note your **Project URL** and **anon key** (Settings → API)
+3. Run `scripts/supabase_schema.sql` in the SQL Editor
+
+#### Step 2: Deploy to Render
+
+1. Go to [render.com](https://render.com) and connect your GitHub repo
+2. Render will auto-detect `render.yaml`
+3. Set these environment variables in Render dashboard:
+
+```env
+DB_TYPE=supabase
+SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+SUPABASE_KEY=your-anon-key
+PORT=8000
+SCRAPER_HEADLESS=true
+CACHE_TTL_MINUTES=10080
+REFRESH_COOLDOWN_SECONDS=300
+LOG_LEVEL=INFO
+PYTHONUNBUFFERED=1
+```
+
+4. Click **Create Web Service**
+
+#### Step 3: Initial Data Load
+
+After deployment, visit your app URL - it will auto-detect the empty database and start scraping (~2-3 minutes).
+
+#### Cost
+
+| Service | Plan | Monthly Cost |
+|---------|------|--------------|
+| Render | Starter | $7 |
+| Render | Free (spins down) | $0 |
+| Supabase | Free (500MB) | $0 |
+
+For detailed instructions, see `.claude/markdowns/RENDER_SUPABASE_DEPLOYMENT.md`.
+
+## Database Configuration
+
+iBasketCal supports multiple database backends. Set the `DB_TYPE` environment variable to choose:
+
+### SQLite (Default)
+
+Local file-based database, perfect for development and self-hosted deployments. No additional setup required.
+
+```env
+DB_TYPE=sqlite
+DATA_DIR=cache  # Optional, defaults to cache/
+```
+
+### Turso
+
+Free cloud-hosted SQLite-compatible edge database. Great for serverless deployments.
+
+1. Create account at https://turso.tech
+2. Create database: `turso db create ibasketcal`
+3. Get URL: `turso db show ibasketcal --url`
+4. Get token: `turso db tokens create ibasketcal`
+
+```env
+DB_TYPE=turso
+TURSO_DATABASE_URL=libsql://your-db.turso.io
+TURSO_AUTH_TOKEN=your-token
+```
+
+Install the driver: `pip install libsql-experimental`
+
+### Supabase
+
+PostgreSQL-based cloud database with generous free tier.
+
+1. Create account at https://supabase.com
+2. Create new project
+3. Run `scripts/supabase_schema.sql` in SQL Editor
+4. Get URL and anon key from project settings
+
+```env
+DB_TYPE=supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-anon-key
+```
+
+Install the driver: `pip install supabase`
+
+**Note:** For Supabase, you must run the schema migration in `scripts/supabase_schema.sql` before starting the application.
 
 ## Data Sources
 
@@ -396,11 +498,18 @@ The scraper captures data for all Israeli basketball competitions including:
 - Ensure your calendar app supports UTF-8.
 - The ICS file uses proper encoding for Hebrew text.
 
+**"Scores appear swapped in RTL mode"**
+- This was a known issue where scores displayed as `Home 80-103 Away` appeared visually closer to the wrong team in RTL Hebrew context.
+- Fixed by placing each team's score in parentheses next to their name: `Home (80) vs Away (103)`.
+
 ## Technical Details
 
-### Storage
-- **SQLite Database** - Efficient indexed storage (~180MB for all data)
-- **WAL Mode** - Allows concurrent reads during writes
+### Storage Architecture
+- **Multi-Database Support** - Pluggable backend via `DatabaseInterface` abstract class
+- **SQLite (Default)** - Efficient indexed storage (~180MB for all data), WAL mode for concurrency
+- **Turso** - Cloud SQLite-compatible edge database for serverless deployments
+- **Supabase** - PostgreSQL cloud database with REST API
+- **Factory Pattern** - Singleton instance created based on `DB_TYPE` environment variable
 - **Cache TTL** - Data considered fresh for 7 days (configurable via `CACHE_TTL_MINUTES`)
 
 ### Data
