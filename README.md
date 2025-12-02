@@ -228,7 +228,14 @@ iBasketCal/
 │   └── supabase_schema.sql        # Supabase migration script
 ├── tests/
 │   ├── __init__.py
-│   └── test_storage.py            # Storage layer tests
+│   ├── conftest.py                # Shared test fixtures
+│   ├── test_storage.py            # Storage layer tests
+│   ├── test_config.py             # Configuration tests
+│   ├── test_rate_limiter.py       # Rate limiter tests
+│   ├── test_calendar_service.py   # ICS generation tests
+│   ├── test_data_service.py       # Data service tests
+│   ├── test_main_api.py           # FastAPI endpoint tests
+│   └── test_integration.py        # End-to-end tests
 ├── Dockerfile
 ├── docker-compose.yml
 ├── setup.py                       # Setup script
@@ -269,8 +276,33 @@ This refreshes data every 30 minutes.
 ### Running Tests
 
 ```bash
+# Run all tests
 pytest
+
+# Run with verbose output
+pytest -v
+
+# Run with coverage report
+pytest --cov=src --cov-report=term-missing
+
+# Run specific test file
+pytest tests/test_calendar_service.py
 ```
+
+**Test Suite Overview:**
+- **115 tests** covering all application layers
+- **~4 seconds** execution time
+- **Coverage**: config (100%), calendar_service (89%), sqlite_db (87%), main (78%)
+
+| Test File | Tests | Coverage |
+|-----------|-------|----------|
+| `test_config.py` | 11 | Configuration helpers |
+| `test_rate_limiter.py` | 9 | Rate limiting logic |
+| `test_calendar_service.py` | 25 | ICS generation, escaping, RTL |
+| `test_data_service.py` | 18 | Data access layer |
+| `test_main_api.py` | 28 | FastAPI endpoints |
+| `test_integration.py` | 7 | End-to-end workflows |
+| `test_storage.py` | 17 | Database operations |
 
 ### Code Formatting
 
