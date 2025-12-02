@@ -31,10 +31,38 @@ def run_command(cmd, description):
         return False
 
 
+def check_venv():
+    """Ensure script is running from a .venv virtual environment."""
+    # Check if we're in a virtual environment
+    venv_path = sys.prefix
+
+    # Check if it's specifically a .venv directory
+    if not (venv_path.endswith('.venv') or '/.venv' in venv_path or '\\.venv' in venv_path):
+        print("[-] Error: Please run this script from a .venv virtual environment.")
+        print("")
+        print("    To create and activate a virtual environment:")
+        print("      python -m venv .venv")
+        print("")
+        print("    On Windows:")
+        print("      .venv\\Scripts\\activate")
+        print("")
+        print("    On macOS/Linux:")
+        print("      source .venv/bin/activate")
+        print("")
+        print("    Then run this script again:")
+        print("      python setup.py")
+        return False
+    return True
+
+
 def main():
     print("=" * 60)
     print("  Israeli Basketball Calendar - Setup")
     print("=" * 60)
+
+    # Check for .venv virtual environment
+    if not check_venv():
+        return 1
 
     # Get the directory of this script
     script_dir = Path(__file__).parent
