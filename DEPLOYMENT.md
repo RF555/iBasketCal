@@ -2,56 +2,18 @@
 
 ## Quick Comparison
 
-| Platform | Free Tier | Persistent Data | Auto-Sleep | Est. Cost |
-|----------|-----------|-----------------|------------|-----------|
-| **Railway** | $5 credit/mo | ✅ Volume | No | Free-$5/mo |
-| **Render** | Yes (limited) | ✅ Disk | Yes (15min) | Free-$7/mo |
-| **Fly.io** | 3 VMs free | ✅ Volume | Yes | Free-$5/mo |
-| **DigitalOcean** | No | ✅ | No | $5/mo |
+| Platform         | Free Tier     | Persistent Data | Auto-Sleep  | Est. Cost  |
+|------------------|---------------|-----------------|-------------|------------|
+| **Railway**      | $5 credit/mo  | ✅ Volume       | No          | Free-$5/mo |
+| **Render**       | Yes (limited) | ✅ Disk         | Yes (15min) | Free-$7/mo |
+| **Fly.io**       | 3 VMs free    | ✅ Volume       | Yes         | Free-$5/mo |
+| **DigitalOcean** | No            | ✅              | No          | $5/mo      |
 
-**Recommendation**: Start with **Railway** (easiest) or **Fly.io** (best performance).
-
----
-
-## Option 1: Railway (Easiest) ⭐
-
-Railway offers the simplest deployment with automatic Docker detection.
-
-### Steps
-
-1. **Go to Railway**
-   ```
-   https://railway.app
-   ```
-
-2. **Connect GitHub**
-   - Click "New Project"
-   - Select "Deploy from GitHub repo"
-   - Choose `RF555/iBasketCal`
-
-3. **Configure**
-   - Railway auto-detects the Dockerfile
-   - Add a volume for persistent data:
-     - Go to project settings
-     - Click "Add Volume"
-     - Mount path: `/app/cache`
-     - Size: 1GB
-
-4. **Deploy**
-   - Click "Deploy"
-   - Wait 3-5 minutes for build
-   - Get your URL: `https://ibasketcal-xxx.up.railway.app`
-
-5. **Custom Domain (Optional)**
-   - Settings → Domains → Add custom domain
-
-### Cost
-- Free tier: $5 credit/month (enough for this app)
-- No credit card required to start
+**Currently using**: **Render**
 
 ---
 
-## Option 2: Render
+## Option 1: Render (Currently Used) ⭐
 
 Render is similar to Railway with a generous free tier.
 
@@ -92,6 +54,58 @@ Render is similar to Railway with a generous free tier.
 
 ---
 
+## Option 2: Railway (Easiest)
+
+Railway offers the simplest deployment with automatic Docker detection.
+
+### Steps
+
+1. **Go to Railway**
+   ```
+   https://railway.app
+   ```
+
+2. **Connect GitHub**
+   - Click "New Project"
+   - Select "Deploy from GitHub repo"
+   - Choose `RF555/iBasketCal`
+
+3. **Configure**
+   - Railway auto-detects the Dockerfile
+   - Add a volume for persistent data:
+     - Go to project settings
+     - Click "Add Volume"
+     - Mount path: `/app/cache`
+     - Size: 1GB
+
+4. **Deploy**
+   - Click "Deploy"
+   - Wait 3-5 minutes for build
+   - Get your URL: `https://ibasketcal-xxx.up.railway.app`
+
+5. **Custom Domain (Optional)**
+   - Settings → Domains → Add custom domain
+
+### Config File
+
+Create `railway.toml` in project root:
+```toml
+[build]
+builder = "dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+```
+
+### Cost
+- Free tier: $5 credit/month (enough for this app)
+- No credit card required to start
+
+---
+
 ## Option 3: Fly.io (Best Performance)
 
 Fly.io runs containers on edge servers worldwide. Frankfurt region is closest to Israel.
@@ -128,8 +142,30 @@ Fly.io runs containers on edge servers worldwide. Frankfurt region is closest to
    fly volumes create basketball_data --size 1 --region fra
    ```
 
-5. **Copy fly.toml**
-   Copy the `fly.toml` from this deployment package to your project root.
+5. **Create fly.toml**
+   Create `fly.toml` in project root:
+   ```toml
+   app = "ibasketcal"
+   primary_region = "fra"
+
+   [build]
+
+   [http_service]
+     internal_port = 8000
+     force_https = true
+     auto_stop_machines = true
+     auto_start_machines = true
+     min_machines_running = 0
+
+   [mounts]
+     source = "basketball_data"
+     destination = "/app/cache"
+
+   [[vm]]
+     cpu_kind = "shared"
+     cpus = 1
+     memory_mb = 512
+   ```
 
 6. **Deploy**
    ```bash
@@ -187,6 +223,25 @@ Simple and reliable, but no free tier.
 5. **Deploy**
    - Review and create
    - Wait for build
+
+### Config File
+
+DigitalOcean uses the App Platform UI for configuration. Alternatively, create `.do/app.yaml`:
+```yaml
+name: ibasketcal
+services:
+  - name: web
+    dockerfile_path: Dockerfile
+    github:
+      repo: RF555/iBasketCal
+      branch: main
+      deploy_on_push: true
+    health_check:
+      http_path: /health
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 8000
+```
 
 ---
 
@@ -306,17 +361,15 @@ Push to GitHub → Auto-deploys (or manual trigger)
 
 ---
 
-## Files Included
+## Project Files
 
 ```
-ibasketcal-deploy/
-├── Dockerfile          # Optimized multi-stage build
-├── docker-compose.yml  # Local development
-├── .dockerignore       # Reduce image size
-├── railway.toml        # Railway config
-├── render.yaml         # Render config
-├── fly.toml            # Fly.io config
-└── DEPLOYMENT.md       # This guide
+├── Dockerfile              # Multi-stage build for production
+├── docker-compose.yml      # Local development
+├── .dockerignore           # Reduce image size
+├── render.yaml             # Render config (currently used)
+├── .github/workflows/      # GitHub Actions CI (runs tests)
+└── DEPLOYMENT.md           # This guide
 ```
 
-Copy these files to your project root and follow the platform-specific instructions above!
+Note: For other platforms (Railway, Fly.io, DigitalOcean), you'll need to create their config files as described above.

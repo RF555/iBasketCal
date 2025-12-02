@@ -1,23 +1,16 @@
-# GitHub Actions - CI/CD Pipeline for iBasketCal
+# GitHub Actions - CI Pipeline for iBasketCal
 #
-# This workflow:
-# 1. Tests the application
-# 2. Builds Docker image
-# 3. Deploys to Fly.io (optional)
-#
-# Setup:
-# 1. Copy this file to .github/workflows/deploy.yml
-# 2. For Fly.io deployment, add FLY_API_TOKEN secret in GitHub repo settings
-#    (Get token with: fly tokens create deploy -x 999999h)
+# Runs tests on push/PR to verify code quality.
+# Deployment is handled by Render (auto-deploys on push to main).
 
-name: CI/CD
+name: CI
 
 on:
   push:
     branches: [main, master]
   pull_request:
     branches: [main, master]
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:
 
 env:
   PYTHON_VERSION: "3.12"
@@ -28,7 +21,7 @@ jobs:
   # =========================================================================
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,7 +36,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio httpx
 
       - name: Install Playwright
         run: |
@@ -52,92 +44,26 @@ jobs:
 
       - name: Run tests
         run: |
-          # Basic import test
-          python -c "from src.storage.database import Database; print('✓ Database module')"
+          # Import tests
+          python -c "from src.storage import get_database, DatabaseInterface; print('✓ Storage module')"
+          python -c "from src.storage.sqlite_db import SQLiteDatabase; print('✓ SQLiteDatabase module')"
           python -c "from src.services.data_service import DataService; print('✓ DataService module')"
           python -c "from src.services.calendar_service import CalendarService; print('✓ CalendarService module')"
           python -c "from src.main import app; print('✓ FastAPI app')"
-          
-          # Database test
+
+          # Database CRUD test
           python -c "
-          from src.storage.database import Database
+          from src.storage.sqlite_db import SQLiteDatabase
           import tempfile
           import os
-          
+
           with tempfile.TemporaryDirectory() as tmpdir:
-              db = Database(os.path.join(tmpdir, 'test.db'))
+              db = SQLiteDatabase(db_path=os.path.join(tmpdir, 'test.db'))
+              db.initialize()
               db.save_seasons([{'_id': 'test', 'name': 'Test Season'}])
               seasons = db.get_seasons()
               assert len(seasons) == 1
               print('✓ Database CRUD works')
           "
-          
+
           echo "All tests passed!"
-
-  # =========================================================================
-  # Build Job
-  # =========================================================================
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          tags: ibasketcal:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Test Docker image
-        run: |
-          docker run --rm ibasketcal:latest python -c "from src.main import app; print('✓ Docker image works')"
-
-  # =========================================================================
-  # Deploy to Fly.io (Optional)
-  # =========================================================================
-  deploy-fly:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
-    # Only run if FLY_API_TOKEN is set
-    environment:
-      name: production
-      url: https://ibasketcal.fly.dev
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Fly.io CLI
-        uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Deploy to Fly.io
-        if: env.FLY_API_TOKEN != ''
-        run: flyctl deploy --remote-only
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-
-  # =========================================================================
-  # Scheduled Data Refresh (runs daily at 6 AM UTC)
-  # =========================================================================
-  # Uncomment this job to enable automatic daily refresh
-  #
-  # refresh:
-  #   runs-on: ubuntu-latest
-  #   if: github.event_name == 'schedule'
-  #   
-  #   steps:
-  #     - name: Trigger data refresh
-  #       run: |
-  #         curl -X POST https://ibasketcal.fly.dev/api/refresh || true
-  #         echo "Refresh triggered"
