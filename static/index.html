@@ -116,10 +116,62 @@
             <div class="last-updated-container">
                 <span class="last-updated-label" data-i18n="footer.lastUpdated">Last updated:</span>
                 <span id="last-update" class="last-updated-time">-</span>
-                <button id="refresh-btn" class="btn btn-refresh" data-i18n="footer.refresh">Refresh Data</button>
             </div>
+
+            <div class="refresh-buttons">
+                <!-- Primary: Match Refresh (prominent) -->
+                <button id="refresh-matches-btn" class="btn btn-refresh-matches" data-i18n="footer.refreshMatches">
+                    Refresh Matches
+                </button>
+
+                <!-- Secondary: Full Refresh (smaller, below) -->
+                <button id="full-refresh-btn" class="btn btn-full-refresh" data-i18n="footer.fullRefresh">
+                    Full Refresh
+                </button>
+            </div>
+
             <p class="data-source" data-i18n="footer.dataSource">Data from ibasketball.co.il</p>
         </footer>
+    </div>
+
+    <!-- Full Refresh Confirmation Modal -->
+    <div id="full-refresh-modal" class="modal">
+        <div class="modal-content">
+            <h3 data-i18n="modal.fullRefresh.title">Full Database Refresh</h3>
+            <p data-i18n="modal.fullRefresh.warning">
+                This will completely replace all data in the database.
+            </p>
+            <p class="modal-duration" data-i18n="modal.fullRefresh.duration">
+                Duration: 2-3 minutes
+            </p>
+            <p data-i18n="modal.fullRefresh.useCase">
+                Use when new seasons start or leagues change.
+            </p>
+            <div class="modal-actions">
+                <button class="btn btn-cancel" data-i18n="modal.cancel">Cancel</button>
+                <button class="btn btn-confirm" data-i18n="modal.proceed">Proceed</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Missing Data Prompt Modal -->
+    <div id="missing-data-modal" class="modal">
+        <div class="modal-content">
+            <h3 data-i18n="modal.missingData.title">New Data Detected</h3>
+            <p data-i18n="modal.missingData.message">
+                New teams or seasons were found that aren't in the database.
+            </p>
+            <p data-i18n="modal.missingData.question">
+                Would you like to run a full refresh to include them?
+            </p>
+            <p class="modal-hint" data-i18n="modal.missingData.hint">
+                (This takes 2-3 minutes)
+            </p>
+            <div class="modal-actions">
+                <button class="btn btn-cancel" data-i18n="modal.skipForNow">Skip for now</button>
+                <button class="btn btn-confirm" data-i18n="modal.runFullRefresh">Run Full Refresh</button>
+            </div>
+        </div>
     </div>
 
     <div id="toast" class="toast"></div>

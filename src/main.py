@@ -84,20 +84,28 @@ refresh_rate_limiter = RateLimiter(cooldown_seconds=config.REFRESH_COOLDOWN_SECO
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    # Startup: Check cache status
+    # Startup: Check cache status and auto-refresh if needed
     # - If no cache exists: don't auto-scrape (too memory-intensive for free tier)
-    # - If cache is stale: auto-refresh in background (lighter operation)
+    # - If full cache is stale: run full refresh
+    # - If only match cache is stale: run match-only refresh (faster)
     print("[*] Checking cache status...")
     cache_info = data_service.get_cache_info()
 
     if not cache_info['exists']:
         print("[*] No cache found. Run initial scrape locally or via POST /api/refresh")
     elif cache_info['stale']:
-        print(f"[*] Cache is stale (last updated: {cache_info['last_updated']})")
-        print("[*] Starting background refresh...")
+        # Full database is stale - need complete refresh
+        print(f"[*] Full cache is stale (last updated: {cache_info['last_updated']})")
+        print("[*] Starting background full refresh...")
         data_service.refresh_async()
+    elif cache_info.get('match_stale', False):
+        # Only matches are stale - use faster match-only refresh
+        print(f"[*] Match data is stale (last updated: {cache_info.get('match_last_updated')})")
+        print("[*] Starting background match refresh...")
+        data_service.refresh_matches_async()
     else:
         print(f"[+] Cache is fresh (last updated: {cache_info['last_updated']})")
+        print(f"[+] Match data fresh (last updated: {cache_info.get('match_last_updated')})")
 
     print("[*] App is ready.")
 
@@ -328,14 +336,80 @@ async def refresh_data():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/refresh-matches")
+async def refresh_matches():
+    """
+    Start a background match-only refresh.
+
+    Much faster than full refresh (~30 sec vs 2-3 min).
+    Only updates match scores and statuses for existing groups.
+
+    Rate limited to once per 5 minutes (shared with full refresh).
+    """
+    try:
+        # Check if already scraping
+        if data_service.is_scraping():
+            return {
+                "status": "in_progress",
+                "message": "Refresh already in progress",
+                "refresh_type": data_service.get_refresh_type()
+            }
+
+        # Check rate limit (shared with full refresh)
+        allowed, wait_seconds = refresh_rate_limiter.try_acquire()
+        if not allowed:
+            return {
+                "status": "rate_limited",
+                "message": f"Please wait {wait_seconds} seconds before refreshing again",
+                "retry_after": wait_seconds
+            }
+
+        # Start background match refresh
+        started, reason = data_service.refresh_matches_async()
+
+        if reason == "no_data":
+            return {
+                "status": "no_data",
+                "message": "No data found. Please run a full refresh first."
+            }
+
+        if started:
+            return {
+                "status": "started",
+                "message": "Match refresh started. This should take about 30 seconds."
+            }
+        else:
+            return {
+                "status": "in_progress",
+                "message": "Refresh already in progress"
+            }
+
+    except Exception as e:
+        print(f"[API] Error in /api/refresh-matches: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/refresh-status")
 async def refresh_status():
-    """Check if a refresh is currently in progress."""
-    return {
+    """Check refresh status including type and missing data."""
+    result = {
         "is_scraping": data_service.is_scraping(),
+        "refresh_type": data_service.get_refresh_type(),
         "cache": data_service.get_cache_info(),
         "last_error": data_service.get_last_scrape_error()
     }
+
+    # Include missing data info if available (after match refresh)
+    refresh_result = data_service.get_refresh_result()
+    if refresh_result:
+        result["missing_data"] = {
+            "teams": refresh_result.get("missing_teams", []),
+            "matches_updated": refresh_result.get("matches_updated", 0)
+        }
+
+    return result
 
 
 @app.get("/health")

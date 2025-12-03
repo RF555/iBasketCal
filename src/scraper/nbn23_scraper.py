@@ -12,7 +12,7 @@ import requests
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Union, Dict, List, Any, TYPE_CHECKING
+from typing import Optional, Union, Dict, List, Any, Set, TYPE_CHECKING
 import time
 
 if TYPE_CHECKING:
@@ -264,6 +264,102 @@ class NBN23Scraper:
             'groups': len(all_groups),
             'matches': total_matches,
             'elapsed': elapsed
+        }
+
+    def scrape_matches_only(
+        self,
+        group_ids: List[str],
+        known_team_ids: Optional[Set[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Scrape only match data for existing groups.
+        Much faster than full scrape - skips seasons/competitions fetching.
+
+        Args:
+            group_ids: List of group IDs to fetch calendars for
+            known_team_ids: Set of team IDs already in database (for detecting missing)
+
+        Returns:
+            {
+                'matches_updated': int,
+                'groups_processed': int,
+                'missing_teams': List[str],  # Team IDs not in database
+                'elapsed': float,
+                'scraped_at': str  # ISO timestamp
+            }
+        """
+        print("[*] Starting match-only refresh...")
+        start_time = time.time()
+
+        # Step 1: Extract token (required for API calls)
+        self._extract_token()
+        self._init_session()
+
+        # Step 2: Track missing references
+        missing_teams: Set[str] = set()
+        known_teams = known_team_ids or set()
+
+        # Step 3: Fetch calendars for each group
+        total_matches = 0
+        groups_processed = 0
+
+        for i, group_id in enumerate(group_ids):
+            if not group_id:
+                continue
+
+            # Progress indicator
+            if (i + 1) % 50 == 0 or i == 0:
+                print(f"    [*] Processing group {i + 1}/{len(group_ids)}...")
+
+            # Fetch calendar
+            calendar = self._api_request("calendar", {"groupId": group_id})
+            if not calendar:
+                continue
+
+            groups_processed += 1
+
+            # Check for missing teams in matches
+            for round_data in calendar.get('rounds', []):
+                for match in round_data.get('matches', []):
+                    home_team = match.get('homeTeam', {})
+                    away_team = match.get('awayTeam', {})
+
+                    home_id = home_team.get('id')
+                    away_id = away_team.get('id')
+
+                    if home_id and home_id not in known_teams:
+                        missing_teams.add(home_id)
+                    if away_id and away_id not in known_teams:
+                        missing_teams.add(away_id)
+
+            # Save to database using save_matches_only method
+            if self.db:
+                count = self.db.save_matches_only(
+                    group_id=group_id,
+                    calendar_data=calendar
+                )
+                total_matches += count
+
+            # Small delay to be nice to the API
+            time.sleep(0.05)
+
+        # Step 4: Update match scrape timestamp (separate from full scrape)
+        if self.db:
+            self.db.update_match_scrape_timestamp()
+
+        elapsed = time.time() - start_time
+        print(f"[+] Match refresh complete in {elapsed:.1f}s")
+        print(f"    Groups: {groups_processed}")
+        print(f"    Matches: {total_matches}")
+        if missing_teams:
+            print(f"    Missing teams: {len(missing_teams)}")
+
+        return {
+            'matches_updated': total_matches,
+            'groups_processed': groups_processed,
+            'missing_teams': list(missing_teams),
+            'elapsed': elapsed,
+            'scraped_at': datetime.now(timezone.utc).isoformat()
         }
 
 

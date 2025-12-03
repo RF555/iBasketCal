@@ -141,10 +141,20 @@ class DatabaseInterface(ABC):
     @abstractmethod
     def update_scrape_timestamp(self) -> None:
         """
-        Record that a scrape just completed successfully.
+        Record that a full scrape just completed successfully.
 
         Updates metadata to current UTC timestamp.
         Used to determine cache freshness.
+        """
+        pass
+
+    @abstractmethod
+    def update_match_scrape_timestamp(self) -> None:
+        """
+        Record that a match-only scrape just completed successfully.
+
+        Updates metadata to current UTC timestamp.
+        Used to determine match cache freshness separately from full cache.
         """
         pass
 
@@ -272,8 +282,11 @@ class DatabaseInterface(ABC):
             Dictionary with:
             - exists: bool - Whether any data has been scraped
             - stale: bool - Whether data is older than CACHE_TTL_MINUTES
-            - last_updated: Optional[str] - ISO timestamp of last scrape
-            - age_minutes: Optional[int] - Minutes since last scrape
+            - last_updated: Optional[str] - ISO timestamp of last full scrape
+            - age_minutes: Optional[int] - Minutes since last full scrape
+            - match_stale: bool - Whether match data is older than MATCH_CACHE_TTL_MINUTES
+            - match_last_updated: Optional[str] - ISO timestamp of last match scrape
+            - match_age_minutes: Optional[int] - Minutes since last match scrape
             - stats: Dict[str, int] - Counts per table/collection
         """
         pass
@@ -311,5 +324,55 @@ class DatabaseInterface(ABC):
         - SQLite: VACUUM command
         - Turso: May be no-op (handled by service)
         - Supabase: VACUUM via SQL (not available via REST)
+        """
+        pass
+
+    # =========================================================================
+    # MATCH-ONLY REFRESH SUPPORT
+    # =========================================================================
+
+    @abstractmethod
+    def get_all_group_ids(self) -> List[str]:
+        """
+        Get all group IDs currently in the database.
+
+        Used by match-only refresh to know which groups to fetch calendars for.
+
+        Returns:
+            List of group ID strings
+        """
+        pass
+
+    @abstractmethod
+    def get_all_team_ids(self) -> set:
+        """
+        Get all team IDs currently in the database.
+
+        Used by match-only refresh to detect missing team references.
+
+        Returns:
+            Set of team ID strings
+        """
+        pass
+
+    @abstractmethod
+    def save_matches_only(
+        self,
+        group_id: str,
+        calendar_data: Dict[str, Any]
+    ) -> int:
+        """
+        Save/update matches from calendar data without full metadata.
+        Used for match-only refresh where group info is already in DB.
+
+        Looks up existing group metadata (competition_name, group_name, season_id)
+        from the database and uses it to save matches.
+
+        Args:
+            group_id: The competition group
+            calendar_data: Calendar response containing 'rounds' array
+
+        Returns:
+            Number of matches saved
         """
         pass

@@ -300,10 +300,19 @@ class SupabaseDatabase(DatabaseInterface):
         return len(standings)
 
     def update_scrape_timestamp(self) -> None:
-        """Update the last scrape timestamp."""
+        """Update the last full scrape timestamp."""
         client = self._get_client()
         client.table('metadata').upsert({
             'key': 'last_scrape',
+            'value': datetime.now(timezone.utc).isoformat(),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }, on_conflict='key').execute()
+
+    def update_match_scrape_timestamp(self) -> None:
+        """Update the last match-only scrape timestamp."""
+        client = self._get_client()
+        client.table('metadata').upsert({
+            'key': 'last_scrape_matches',
             'value': datetime.now(timezone.utc).isoformat(),
             'updated_at': datetime.now(timezone.utc).isoformat()
         }, on_conflict='key').execute()
@@ -497,6 +506,7 @@ class SupabaseDatabase(DatabaseInterface):
         """Get cache status information."""
         client = self._get_client()
 
+        # Get full scrape timestamp
         response = (
             client.table('metadata')
             .select('value, updated_at')
@@ -510,6 +520,9 @@ class SupabaseDatabase(DatabaseInterface):
                 'stale': True,
                 'last_updated': None,
                 'age_minutes': None,
+                'match_stale': True,
+                'match_last_updated': None,
+                'match_age_minutes': None,
                 'stats': {}
             }
 
@@ -517,6 +530,31 @@ class SupabaseDatabase(DatabaseInterface):
         last_updated = datetime.fromisoformat(row['value'].replace('Z', '+00:00'))
         age = datetime.now(timezone.utc) - last_updated
         age_minutes = int(age.total_seconds() / 60)
+
+        # Get match scrape timestamp
+        match_response = (
+            client.table('metadata')
+            .select('value')
+            .eq('key', 'last_scrape_matches')
+            .execute()
+        )
+
+        match_last_updated = None
+        match_age_minutes = None
+        match_stale = True
+
+        if match_response.data:
+            match_row = match_response.data[0]
+            match_last_updated_dt = datetime.fromisoformat(match_row['value'].replace('Z', '+00:00'))
+            match_age = datetime.now(timezone.utc) - match_last_updated_dt
+            match_age_minutes = int(match_age.total_seconds() / 60)
+            match_last_updated = match_row['value']
+            match_stale = match_age_minutes > config.MATCH_CACHE_TTL_MINUTES
+        else:
+            # If no match scrape yet, use full scrape timestamp
+            match_last_updated = row['value']
+            match_age_minutes = age_minutes
+            match_stale = match_age_minutes > config.MATCH_CACHE_TTL_MINUTES
 
         # Get stats (count queries)
         stats = {}
@@ -533,6 +571,9 @@ class SupabaseDatabase(DatabaseInterface):
             'stale': age_minutes > config.CACHE_TTL_MINUTES,
             'last_updated': row['value'],
             'age_minutes': age_minutes,
+            'match_stale': match_stale,
+            'match_last_updated': match_last_updated,
+            'match_age_minutes': match_age_minutes,
             'stats': stats
         }
 
@@ -584,3 +625,66 @@ class SupabaseDatabase(DatabaseInterface):
         """Optimize database storage - no-op for Supabase (not available via REST)."""
         # VACUUM requires direct SQL access, not available via Supabase REST API
         pass
+
+    # =========================================================================
+    # MATCH-ONLY REFRESH SUPPORT
+    # =========================================================================
+
+    def get_all_group_ids(self) -> List[str]:
+        """Get all group IDs from the database."""
+        client = self._get_client()
+        response = client.table('groups').select('id').execute()
+        return [row['id'] for row in response.data]
+
+    def get_all_team_ids(self) -> set:
+        """Get all team IDs from the database."""
+        client = self._get_client()
+        response = client.table('teams').select('id').execute()
+        return {row['id'] for row in response.data}
+
+    def save_matches_only(
+        self,
+        group_id: str,
+        calendar_data: Dict[str, Any]
+    ) -> int:
+        """Save matches using existing group metadata from database."""
+        client = self._get_client()
+
+        # Get existing group metadata with competition info
+        group_response = (
+            client.table('groups')
+            .select('id, name, competition_id, season_id')
+            .eq('id', group_id)
+            .execute()
+        )
+
+        if not group_response.data:
+            print(f"[!] Group {group_id} not found in database")
+            return 0
+
+        group_row = group_response.data[0]
+
+        # Get competition name
+        comp_response = (
+            client.table('competitions')
+            .select('name')
+            .eq('id', group_row['competition_id'])
+            .execute()
+        )
+
+        if not comp_response.data:
+            print(f"[!] Competition {group_row['competition_id']} not found")
+            return 0
+
+        group_name = group_row['name']
+        competition_name = comp_response.data[0]['name']
+        season_id = group_row['season_id']
+
+        # Use existing save_matches logic with the metadata
+        return self.save_matches(
+            group_id=group_id,
+            calendar_data=calendar_data,
+            competition_name=competition_name,
+            group_name=group_name,
+            season_id=season_id
+        )

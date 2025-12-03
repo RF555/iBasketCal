@@ -65,18 +65,41 @@
     "note": "Note: Sync updates may take up to 24 hours, depending on your calendar app"
   },
   "footer": {
-    "refresh": "Refresh Data",
-    "refreshing": "Refreshing...",
+    "refreshMatches": "Refresh Matches",
+    "refreshingMatches": "Refreshing matches...",
+    "fullRefresh": "Full Refresh",
+    "refreshingFull": "Full refresh...",
     "dataSource": "Data from ibasketball.co.il",
     "lastUpdated": "Last updated:",
     "noData": "No data - click refresh",
     "staleData": "Stale data - click refresh"
+  },
+  "modal": {
+    "fullRefresh": {
+      "title": "Full Database Refresh",
+      "warning": "This will completely replace all data in the database.",
+      "duration": "Duration: 2-3 minutes",
+      "useCase": "Use when new seasons start or leagues change."
+    },
+    "missingData": {
+      "title": "New Data Detected",
+      "message": "New teams or seasons were found that aren't in the database.",
+      "question": "Would you like to run a full refresh to include them?",
+      "hint": "(This takes 2-3 minutes)"
+    },
+    "cancel": "Cancel",
+    "proceed": "Proceed",
+    "skipForNow": "Skip for now",
+    "runFullRefresh": "Run Full Refresh"
   },
   "toast": {
     "copied": "URL copied!",
     "refreshInProgress": "Refresh already in progress, please wait...",
     "refreshStarted": "Data refresh started. This may take 1-2 minutes...",
     "refreshSuccess": "Data updated!",
+    "matchRefreshStarted": "Refreshing matches...",
+    "matchRefreshSuccess": "Matches updated!",
+    "noDataForMatchRefresh": "No data found. Please run a full refresh first.",
     "loadError": "Error loading data",
     "leagueError": "Error loading leagues",
     "matchError": "Error loading matches",

@@ -367,11 +367,19 @@ class SQLiteDatabase(DatabaseInterface):
         return len(standings)
 
     def update_scrape_timestamp(self) -> None:
-        """Update the last scrape timestamp."""
+        """Update the last full scrape timestamp."""
         with self.transaction() as conn:
             conn.execute('''
                 INSERT OR REPLACE INTO metadata (key, value, updated_at)
                 VALUES ('last_scrape', ?, CURRENT_TIMESTAMP)
+            ''', (datetime.now(timezone.utc).isoformat(),))
+
+    def update_match_scrape_timestamp(self) -> None:
+        """Update the last match-only scrape timestamp."""
+        with self.transaction() as conn:
+            conn.execute('''
+                INSERT OR REPLACE INTO metadata (key, value, updated_at)
+                VALUES ('last_scrape_matches', ?, CURRENT_TIMESTAMP)
             ''', (datetime.now(timezone.utc).isoformat(),))
 
     # =========================================================================
@@ -518,6 +526,7 @@ class SQLiteDatabase(DatabaseInterface):
         """Get cache status information."""
         conn = self._get_connection()
 
+        # Get full scrape timestamp
         row = conn.execute(
             "SELECT value, updated_at FROM metadata WHERE key = 'last_scrape'"
         ).fetchone()
@@ -528,12 +537,36 @@ class SQLiteDatabase(DatabaseInterface):
                 'stale': True,
                 'last_updated': None,
                 'age_minutes': None,
+                'match_stale': True,
+                'match_last_updated': None,
+                'match_age_minutes': None,
                 'stats': {}
             }
 
         last_updated = datetime.fromisoformat(row['value'].replace('Z', '+00:00'))
         age = datetime.now(timezone.utc) - last_updated
         age_minutes = int(age.total_seconds() / 60)
+
+        # Get match scrape timestamp
+        match_row = conn.execute(
+            "SELECT value FROM metadata WHERE key = 'last_scrape_matches'"
+        ).fetchone()
+
+        match_last_updated = None
+        match_age_minutes = None
+        match_stale = True
+
+        if match_row:
+            match_last_updated_dt = datetime.fromisoformat(match_row['value'].replace('Z', '+00:00'))
+            match_age = datetime.now(timezone.utc) - match_last_updated_dt
+            match_age_minutes = int(match_age.total_seconds() / 60)
+            match_last_updated = match_row['value']
+            match_stale = match_age_minutes > config.MATCH_CACHE_TTL_MINUTES
+        else:
+            # If no match scrape yet, use full scrape timestamp
+            match_last_updated = row['value']
+            match_age_minutes = age_minutes
+            match_stale = match_age_minutes > config.MATCH_CACHE_TTL_MINUTES
 
         # Get stats
         stats = {}
@@ -546,6 +579,9 @@ class SQLiteDatabase(DatabaseInterface):
             'stale': age_minutes > config.CACHE_TTL_MINUTES,
             'last_updated': row['value'],
             'age_minutes': age_minutes,
+            'match_stale': match_stale,
+            'match_last_updated': match_last_updated,
+            'match_age_minutes': match_age_minutes,
             'stats': stats
         }
 
@@ -566,3 +602,56 @@ class SQLiteDatabase(DatabaseInterface):
         """Reclaim unused space in database file."""
         conn = self._get_connection()
         conn.execute('VACUUM')
+
+    # =========================================================================
+    # MATCH-ONLY REFRESH SUPPORT
+    # =========================================================================
+
+    def get_all_group_ids(self) -> List[str]:
+        """Get all group IDs from the database."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM groups")
+        return [row[0] for row in cursor.fetchall()]
+
+    def get_all_team_ids(self) -> set:
+        """Get all team IDs from the database."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM teams")
+        return {row[0] for row in cursor.fetchall()}
+
+    def save_matches_only(
+        self,
+        group_id: str,
+        calendar_data: Dict[str, Any]
+    ) -> int:
+        """Save matches using existing group metadata from database."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        # Get existing group metadata
+        cursor.execute("""
+            SELECT g.id, g.name, c.name as comp_name, g.season_id
+            FROM groups g
+            JOIN competitions c ON g.competition_id = c.id
+            WHERE g.id = ?
+        """, (group_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            print(f"[!] Group {group_id} not found in database")
+            return 0
+
+        group_name = row[1]
+        competition_name = row[2]
+        season_id = row[3]
+
+        # Use existing save_matches logic with the metadata
+        return self.save_matches(
+            group_id=group_id,
+            calendar_data=calendar_data,
+            competition_name=competition_name,
+            group_name=group_name,
+            season_id=season_id
+        )

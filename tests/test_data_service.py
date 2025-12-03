@@ -245,30 +245,64 @@ class TestDataServiceScrapingState:
 
         assert service.is_scraping() is False
 
-    def test_refresh_async_starts_background_thread(self, test_data_dir, db_fixture, mock_scraper):
+    def test_refresh_async_starts_background_thread(self, test_data_dir, db_fixture):
         """Background refresh starts."""
+        import threading
+
         with patch('src.services.data_service.get_database', return_value=db_fixture):
             service = DataService(cache_dir=test_data_dir)
-            service._scraper = mock_scraper
+
+            # Create a blocking mock scraper to ensure is_scraping stays True
+            scrape_started = threading.Event()
+            scrape_continue = threading.Event()
+
+            def blocking_scrape():
+                scrape_started.set()
+                scrape_continue.wait(timeout=5)
+
+            blocking_scraper = Mock()
+            blocking_scraper.scrape.side_effect = blocking_scrape
+            service._scraper = blocking_scraper
 
             started = service.refresh_async()
 
             assert started is True
+            scrape_started.wait(timeout=2)  # Wait for scrape to actually start
             assert service.is_scraping() is True
 
-    def test_refresh_async_returns_false_when_already_scraping(self, test_data_dir, db_fixture, mock_scraper):
+            scrape_continue.set()  # Let the scrape complete
+
+    def test_refresh_async_returns_false_when_already_scraping(self, test_data_dir, db_fixture):
         """Prevents duplicate scrapes."""
+        import threading
+
         with patch('src.services.data_service.get_database', return_value=db_fixture):
             service = DataService(cache_dir=test_data_dir)
-            service._scraper = mock_scraper
+
+            # Create a blocking mock scraper to ensure first scrape is still running
+            scrape_started = threading.Event()
+            scrape_continue = threading.Event()
+
+            def blocking_scrape():
+                scrape_started.set()
+                scrape_continue.wait(timeout=5)
+
+            blocking_scraper = Mock()
+            blocking_scraper.scrape.side_effect = blocking_scrape
+            service._scraper = blocking_scraper
 
             # Start first scrape
             started1 = service.refresh_async()
             assert started1 is True
 
-            # Try to start another
+            # Wait for scrape to start
+            scrape_started.wait(timeout=2)
+
+            # Try to start another - should fail
             started2 = service.refresh_async()
             assert started2 is False
+
+            scrape_continue.set()  # Let the scrape complete
 
     def test_last_scrape_error_tracking(self, test_data_dir):
         """Error tracking works."""
@@ -346,3 +380,144 @@ class TestDataServiceScraperProperty:
 
             # Should be the same instance
             assert scraper1 is scraper2
+
+
+class TestDataServiceMatchRefresh:
+    """Tests for match-only refresh functionality."""
+
+    def setup_method(self):
+        """Reset before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after each test."""
+        reset_database()
+
+    def test_refresh_matches_async_returns_no_data_when_empty(self, test_data_dir, db_fixture):
+        """Returns no_data when no groups exist."""
+        with patch('src.services.data_service.get_database', return_value=db_fixture):
+            service = DataService(cache_dir=test_data_dir)
+
+            started, reason = service.refresh_matches_async()
+
+            assert started is False
+            assert reason == 'no_data'
+
+    def test_refresh_matches_async_starts_when_groups_exist(self, test_data_dir, db_fixture, mock_scraper):
+        """Starts match refresh when groups exist."""
+        with patch('src.services.data_service.get_database', return_value=db_fixture):
+            service = DataService(cache_dir=test_data_dir)
+            service._scraper = mock_scraper
+
+            # Add some data to the database
+            db_fixture.save_seasons([{'_id': 'season1', 'name': '2024-2025'}])
+            db_fixture.save_competitions('season1', [
+                {'name': 'Premier', 'groups': [{'id': 'group1', 'name': 'A'}]}
+            ])
+
+            started, reason = service.refresh_matches_async()
+
+            assert started is True
+            assert reason == 'started'
+            assert service.is_scraping() is True
+
+    def test_refresh_matches_async_returns_in_progress_when_scraping(self, test_data_dir, db_fixture, mock_scraper):
+        """Returns in_progress when already scraping."""
+        with patch('src.services.data_service.get_database', return_value=db_fixture):
+            service = DataService(cache_dir=test_data_dir)
+            service._scraper = mock_scraper
+
+            # Add data
+            db_fixture.save_seasons([{'_id': 'season1', 'name': '2024-2025'}])
+            db_fixture.save_competitions('season1', [
+                {'name': 'Premier', 'groups': [{'id': 'group1', 'name': 'A'}]}
+            ])
+
+            # Start first refresh
+            started1, reason1 = service.refresh_matches_async()
+            assert started1 is True
+
+            # Try to start second refresh
+            started2, reason2 = service.refresh_matches_async()
+            assert started2 is False
+            assert reason2 == 'in_progress'
+
+    def test_get_refresh_type_returns_matches_during_match_refresh(self, test_data_dir, db_fixture, mock_scraper):
+        """get_refresh_type returns 'matches' during match refresh."""
+        with patch('src.services.data_service.get_database', return_value=db_fixture):
+            service = DataService(cache_dir=test_data_dir)
+            service._scraper = mock_scraper
+
+            # Add data
+            db_fixture.save_seasons([{'_id': 'season1', 'name': '2024-2025'}])
+            db_fixture.save_competitions('season1', [
+                {'name': 'Premier', 'groups': [{'id': 'group1', 'name': 'A'}]}
+            ])
+
+            # Initially None
+            assert service.get_refresh_type() is None
+
+            # Start match refresh
+            service.refresh_matches_async()
+
+            # Should be 'matches'
+            assert service.get_refresh_type() == 'matches'
+
+    def test_get_refresh_type_returns_full_during_full_refresh(self, test_data_dir, db_fixture, mock_scraper):
+        """get_refresh_type returns 'full' during full refresh."""
+        with patch('src.services.data_service.get_database', return_value=db_fixture):
+            service = DataService(cache_dir=test_data_dir)
+            service._scraper = mock_scraper
+
+            # Start full refresh
+            service.refresh_async()
+
+            # Should be 'full'
+            assert service.get_refresh_type() == 'full'
+
+    def test_get_refresh_result_returns_none_initially(self, test_data_dir):
+        """get_refresh_result returns None before any refresh."""
+        with patch('src.services.data_service.get_database'):
+            service = DataService(cache_dir=test_data_dir)
+
+            assert service.get_refresh_result() is None
+
+    def test_full_and_match_refresh_share_lock(self, test_data_dir, db_fixture):
+        """Full and match refresh cannot run concurrently."""
+        import threading
+
+        with patch('src.services.data_service.get_database', return_value=db_fixture):
+            service = DataService(cache_dir=test_data_dir)
+
+            # Add data for match refresh
+            db_fixture.save_seasons([{'_id': 'season1', 'name': '2024-2025'}])
+            db_fixture.save_competitions('season1', [
+                {'name': 'Premier', 'groups': [{'id': 'group1', 'name': 'A'}]}
+            ])
+
+            # Create a blocking mock scraper that waits for an event
+            scrape_started = threading.Event()
+            scrape_continue = threading.Event()
+
+            def blocking_scrape():
+                scrape_started.set()  # Signal that scrape has started
+                scrape_continue.wait(timeout=5)  # Wait until test says continue
+
+            blocking_scraper = Mock()
+            blocking_scraper.scrape.side_effect = blocking_scrape
+            service._scraper = blocking_scraper
+
+            # Start full refresh
+            started_full = service.refresh_async()
+            assert started_full is True
+
+            # Wait for scrape to actually start
+            scrape_started.wait(timeout=2)
+
+            # Try to start match refresh - should fail because full is in progress
+            started_match, reason = service.refresh_matches_async()
+            assert started_match is False
+            assert reason == 'in_progress'
+
+            # Let the full refresh complete
+            scrape_continue.set()

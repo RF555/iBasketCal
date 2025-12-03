@@ -65,18 +65,41 @@
     "note": "שים לב: סנכרון עדכונים עשוי לקחת עד 24 שעות, בהתאם לאפליקציית לוח השנה"
   },
   "footer": {
-    "refresh": "רענן נתונים",
-    "refreshing": "מרענן...",
+    "refreshMatches": "רענן משחקים",
+    "refreshingMatches": "מרענן משחקים...",
+    "fullRefresh": "רענון מלא",
+    "refreshingFull": "רענון מלא...",
     "dataSource": "נתונים מ-ibasketball.co.il",
     "lastUpdated": "עודכן לאחרונה:",
     "noData": "אין נתונים - לחץ רענן",
     "staleData": "נתונים ישנים - לחץ רענן"
+  },
+  "modal": {
+    "fullRefresh": {
+      "title": "רענון מלא של מסד הנתונים",
+      "warning": "פעולה זו תחליף את כל הנתונים במסד הנתונים.",
+      "duration": "משך: 2-3 דקות",
+      "useCase": "השתמש כאשר עונה חדשה מתחילה או ליגות משתנות."
+    },
+    "missingData": {
+      "title": "נמצאו נתונים חדשים",
+      "message": "נמצאו קבוצות או עונות חדשות שאינן במסד הנתונים.",
+      "question": "האם ברצונך להריץ רענון מלא כדי לכלול אותם?",
+      "hint": "(לוקח 2-3 דקות)"
+    },
+    "cancel": "ביטול",
+    "proceed": "המשך",
+    "skipForNow": "דלג לעת עתה",
+    "runFullRefresh": "הרץ רענון מלא"
   },
   "toast": {
     "copied": "הכתובת הועתקה!",
     "refreshInProgress": "רענון כבר מתבצע, אנא המתן...",
     "refreshStarted": "רענון נתונים התחיל. הפעולה עשויה להימשך 1-2 דקות...",
     "refreshSuccess": "הנתונים עודכנו!",
+    "matchRefreshStarted": "מרענן משחקים...",
+    "matchRefreshSuccess": "המשחקים עודכנו!",
+    "noDataForMatchRefresh": "אין נתונים. יש להריץ רענון מלא תחילה.",
     "loadError": "שגיאה בטעינת נתונים",
     "leagueError": "שגיאה בטעינת ליגות",
     "matchError": "שגיאה בטעינת משחקים",

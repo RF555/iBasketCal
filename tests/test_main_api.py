@@ -434,6 +434,115 @@ class TestHealthEndpoint:
                     assert 'database_size_mb' in data
 
 
+class TestRefreshMatchesEndpoint:
+    """Tests for match-only refresh endpoint."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+        refresh_rate_limiter.reset()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+        refresh_rate_limiter.reset()
+
+    def test_refresh_matches_endpoint_starts_scrape(self):
+        """POST /api/refresh-matches starts match scrape."""
+        with patch.object(data_service, 'is_scraping', return_value=False):
+            with patch.object(data_service, 'refresh_matches_async', return_value=(True, 'started')):
+                response = client.post("/api/refresh-matches")
+
+                assert response.status_code == 200
+                data = response.json()
+                assert data['status'] == 'started'
+
+    def test_refresh_matches_endpoint_already_scraping(self):
+        """Returns in_progress when already scraping."""
+        with patch.object(data_service, 'is_scraping', return_value=True):
+            with patch.object(data_service, 'get_refresh_type', return_value='full'):
+                response = client.post("/api/refresh-matches")
+
+                assert response.status_code == 200
+                data = response.json()
+                assert data['status'] == 'in_progress'
+                assert data['refresh_type'] == 'full'
+
+    def test_refresh_matches_endpoint_no_data(self):
+        """Returns no_data when database is empty."""
+        with patch.object(data_service, 'is_scraping', return_value=False):
+            with patch.object(data_service, 'refresh_matches_async', return_value=(False, 'no_data')):
+                response = client.post("/api/refresh-matches")
+
+                assert response.status_code == 200
+                data = response.json()
+                assert data['status'] == 'no_data'
+
+    def test_refresh_matches_endpoint_rate_limited(self):
+        """Rate limiting works for match refresh."""
+        with patch.object(data_service, 'is_scraping', return_value=False):
+            with patch.object(data_service, 'refresh_matches_async', return_value=(True, 'started')):
+                # First request - should succeed
+                response1 = client.post("/api/refresh-matches")
+                assert response1.status_code == 200
+                assert response1.json()['status'] == 'started'
+
+                # Second request immediately - should be rate limited
+                response2 = client.post("/api/refresh-matches")
+                assert response2.status_code == 200
+                data = response2.json()
+                assert data['status'] == 'rate_limited'
+
+    def test_refresh_matches_shares_rate_limit_with_full_refresh(self):
+        """Match and full refresh share rate limit."""
+        with patch.object(data_service, 'is_scraping', return_value=False):
+            with patch.object(data_service, 'refresh_async', return_value=True):
+                # First: full refresh
+                response1 = client.post("/api/refresh")
+                assert response1.json()['status'] == 'started'
+
+            with patch.object(data_service, 'refresh_matches_async', return_value=(True, 'started')):
+                # Second: match refresh - should be rate limited
+                response2 = client.post("/api/refresh-matches")
+                assert response2.json()['status'] == 'rate_limited'
+
+    def test_refresh_status_includes_refresh_type(self):
+        """GET /api/refresh-status includes refresh_type."""
+        mock_cache = {'exists': True, 'stale': False}
+
+        with patch.object(data_service, 'is_scraping', return_value=True):
+            with patch.object(data_service, 'get_refresh_type', return_value='matches'):
+                with patch.object(data_service, 'get_cache_info', return_value=mock_cache):
+                    with patch.object(data_service, 'get_last_scrape_error', return_value=None):
+                        with patch.object(data_service, 'get_refresh_result', return_value=None):
+                            response = client.get("/api/refresh-status")
+
+                            assert response.status_code == 200
+                            data = response.json()
+                            assert data['refresh_type'] == 'matches'
+
+    def test_refresh_status_includes_missing_data(self):
+        """GET /api/refresh-status includes missing_data after match refresh."""
+        mock_cache = {'exists': True, 'stale': False}
+        mock_result = {
+            'missing_teams': ['team_123', 'team_456'],
+            'matches_updated': 500
+        }
+
+        with patch.object(data_service, 'is_scraping', return_value=False):
+            with patch.object(data_service, 'get_refresh_type', return_value=None):
+                with patch.object(data_service, 'get_cache_info', return_value=mock_cache):
+                    with patch.object(data_service, 'get_last_scrape_error', return_value=None):
+                        with patch.object(data_service, 'get_refresh_result', return_value=mock_result):
+                            response = client.get("/api/refresh-status")
+
+                            assert response.status_code == 200
+                            data = response.json()
+                            assert 'missing_data' in data
+                            assert data['missing_data']['teams'] == ['team_123', 'team_456']
+                            assert data['missing_data']['matches_updated'] == 500
+
+
 class TestCORS:
     """Tests for CORS middleware."""
 

@@ -53,8 +53,13 @@ const elements = {
 
     // Footer
     lastUpdate: document.getElementById('last-update'),
-    refreshBtn: document.getElementById('refresh-btn'),
-    toast: document.getElementById('toast')
+    refreshMatchesBtn: document.getElementById('refresh-matches-btn'),
+    fullRefreshBtn: document.getElementById('full-refresh-btn'),
+    toast: document.getElementById('toast'),
+
+    // Modals
+    fullRefreshModal: document.getElementById('full-refresh-modal'),
+    missingDataModal: document.getElementById('missing-data-modal')
 };
 
 // Initialize with i18n
@@ -290,8 +295,12 @@ function setupEventListeners() {
     // Copy button
     elements.copyBtn.addEventListener('click', copyCalendarUrl);
 
-    // Refresh button
-    elements.refreshBtn.addEventListener('click', refreshData);
+    // Refresh buttons
+    elements.refreshMatchesBtn.addEventListener('click', refreshMatches);
+    elements.fullRefreshBtn.addEventListener('click', showFullRefreshModal);
+
+    // Modal event listeners
+    setupModalListeners();
 
     // Outlook dropdown toggle
     elements.outlookDropdownBtn.addEventListener('click', (e) => {
@@ -314,6 +323,34 @@ function setupEventListeners() {
             elements.outlookDropdown.classList.remove('open');
         }, 100);
     });
+}
+
+// Setup modal event listeners
+function setupModalListeners() {
+    // Full refresh modal
+    const fullRefreshModal = elements.fullRefreshModal;
+    if (fullRefreshModal) {
+        fullRefreshModal.querySelector('.btn-cancel').addEventListener('click', () => hideModal('full-refresh-modal'));
+        fullRefreshModal.querySelector('.btn-confirm').addEventListener('click', confirmFullRefresh);
+        // Close on background click
+        fullRefreshModal.addEventListener('click', (e) => {
+            if (e.target === fullRefreshModal) hideModal('full-refresh-modal');
+        });
+    }
+
+    // Missing data modal
+    const missingDataModal = elements.missingDataModal;
+    if (missingDataModal) {
+        missingDataModal.querySelector('.btn-cancel').addEventListener('click', () => hideModal('missing-data-modal'));
+        missingDataModal.querySelector('.btn-confirm').addEventListener('click', () => {
+            hideModal('missing-data-modal');
+            confirmFullRefresh();
+        });
+        // Close on background click
+        missingDataModal.addEventListener('click', (e) => {
+            if (e.target === missingDataModal) hideModal('missing-data-modal');
+        });
+    }
 }
 
 // Season change handler
@@ -577,29 +614,117 @@ async function copyCalendarUrl() {
     }
 }
 
-// Refresh data with rate limiting support
-async function refreshData() {
-    elements.refreshBtn.disabled = true;
-    elements.refreshBtn.textContent = t('footer.refreshing');
+// Modal helpers
+function showModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.classList.add('visible');
+}
+
+function hideModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.classList.remove('visible');
+}
+
+function showFullRefreshModal() {
+    showModal('full-refresh-modal');
+}
+
+function showMissingDataModal() {
+    showModal('missing-data-modal');
+}
+
+// Disable/enable both refresh buttons
+function setRefreshButtonsDisabled(disabled) {
+    elements.refreshMatchesBtn.disabled = disabled;
+    elements.fullRefreshBtn.disabled = disabled;
+}
+
+// Match refresh handler (fast - ~30 seconds)
+async function refreshMatches() {
+    setRefreshButtonsDisabled(true);
+    elements.refreshMatchesBtn.textContent = t('footer.refreshingMatches');
 
     try {
-        // Start the background refresh
-        const response = await fetch(API_BASE + '/api/refresh', {
+        const response = await fetch(API_BASE + '/api/refresh-matches', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
         const result = await response.json();
 
-        // Handle different response statuses
         switch (result.status) {
             case 'rate_limited':
                 showToast(
                     t('toast.rateLimited', { seconds: result.retry_after }),
                     'warning'
                 );
-                elements.refreshBtn.disabled = false;
-                elements.refreshBtn.textContent = t('footer.refresh');
-                return; // Don't poll, just return
+                resetRefreshButtons();
+                return;
+
+            case 'no_data':
+                showToast(t('toast.noDataForMatchRefresh'), 'warning');
+                showFullRefreshModal();
+                resetRefreshButtons();
+                return;
+
+            case 'in_progress':
+                showToast(t('toast.refreshInProgress'), 'info');
+                break;
+
+            case 'started':
+                showToast(t('toast.matchRefreshStarted'), 'info');
+                break;
+        }
+
+        // Poll for completion
+        await pollRefreshStatus('matches');
+
+        showToast(t('toast.matchRefreshSuccess'), 'success');
+
+        // Check for missing data after match refresh
+        const statusResponse = await fetch(API_BASE + '/api/refresh-status');
+        const status = await statusResponse.json();
+
+        if (status.missing_data) {
+            const { teams } = status.missing_data;
+            if (teams && teams.length > 0) {
+                showMissingDataModal();
+            }
+        }
+
+        // Clear cached data and reload
+        state.competitions = {};
+        state.teams = {};
+        await loadInitialData();
+
+    } catch (error) {
+        console.error('Error refreshing matches:', error);
+        showToast(t('toast.refreshError'), 'error');
+    } finally {
+        resetRefreshButtons();
+    }
+}
+
+// Full refresh handler (slow - 2-3 minutes)
+async function confirmFullRefresh() {
+    hideModal('full-refresh-modal');
+    setRefreshButtonsDisabled(true);
+    elements.fullRefreshBtn.textContent = t('footer.refreshingFull');
+
+    try {
+        const response = await fetch(API_BASE + '/api/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await response.json();
+
+        switch (result.status) {
+            case 'rate_limited':
+                showToast(
+                    t('toast.rateLimited', { seconds: result.retry_after }),
+                    'warning'
+                );
+                resetRefreshButtons();
+                return;
 
             case 'in_progress':
                 showToast(t('toast.refreshInProgress'), 'info');
@@ -608,38 +733,42 @@ async function refreshData() {
             case 'started':
                 showToast(t('toast.refreshStarted'), 'info');
                 break;
-
-            default:
-                console.warn('Unknown refresh status:', result.status);
         }
 
         // Poll for completion
-        await pollRefreshStatus();
+        await pollRefreshStatus('full');
 
         showToast(t('toast.refreshSuccess'), 'success');
 
         // Clear cached data and reload
         state.competitions = {};
         state.teams = {};
-
         await loadInitialData();
 
     } catch (error) {
         console.error('Error refreshing data:', error);
         showToast(t('toast.refreshError'), 'error');
     } finally {
-        elements.refreshBtn.disabled = false;
-        elements.refreshBtn.textContent = t('footer.refresh');
+        resetRefreshButtons();
     }
 }
 
+// Reset refresh buttons to default state
+function resetRefreshButtons() {
+    setRefreshButtonsDisabled(false);
+    elements.refreshMatchesBtn.textContent = t('footer.refreshMatches');
+    elements.fullRefreshBtn.textContent = t('footer.fullRefresh');
+}
+
 // Poll refresh status until complete with timeout handling
-async function pollRefreshStatus() {
-    const maxAttempts = 30; // Max 10 minutes (18 * 20 seconds)
+async function pollRefreshStatus(refreshType = 'full') {
+    // Match refresh is faster, so use shorter intervals
+    const pollInterval = refreshType === 'matches' ? 5000 : 20000;
+    const maxAttempts = refreshType === 'matches' ? 24 : 30; // 2 min for matches, 10 min for full
     let attempts = 0;
 
     while (attempts < maxAttempts) {
-        await sleep(20000); // Wait 20 seconds between polls
+        await sleep(pollInterval);
 
         try {
             const controller = new AbortController();
@@ -662,7 +791,11 @@ async function pollRefreshStatus() {
 
             // Update button text with progress indicator
             const dots = '.'.repeat((attempts % 3) + 1);
-            elements.refreshBtn.textContent = t('footer.refreshing').replace('...', '') + dots;
+            if (refreshType === 'matches') {
+                elements.refreshMatchesBtn.textContent = t('footer.refreshingMatches').replace('...', '') + dots;
+            } else {
+                elements.fullRefreshBtn.textContent = t('footer.refreshingFull').replace('...', '') + dots;
+            }
 
             attempts++;
 

@@ -39,6 +39,10 @@ class DataService:
         self._last_scrape_error: Optional[str] = None
         self._executor = ThreadPoolExecutor(max_workers=1)
 
+        # Match refresh state
+        self._refresh_type: Optional[str] = None  # "full" | "matches" | None
+        self._refresh_result: Optional[Dict[str, Any]] = None
+
     @property
     def scraper(self) -> NBN23Scraper:
         """Lazy initialization of scraper with database."""
@@ -88,7 +92,7 @@ class DataService:
 
     def refresh_async(self) -> bool:
         """
-        Start a background scrape.
+        Start a background full scrape.
 
         Returns:
             True if started, False if already running
@@ -97,7 +101,9 @@ class DataService:
             if self._is_scraping:
                 return False
             self._is_scraping = True
+            self._refresh_type = "full"
             self._last_scrape_error = None
+            self._refresh_result = None
 
         def do_scrape():
             try:
@@ -111,9 +117,63 @@ class DataService:
                 traceback.print_exc()
             finally:
                 self._is_scraping = False
+                self._refresh_type = None
 
         self._executor.submit(do_scrape)
         return True
+
+    def refresh_matches_async(self) -> tuple:
+        """
+        Start a background match-only refresh.
+
+        Returns:
+            Tuple of (started: bool, reason: str)
+            - (True, "started") - Refresh started
+            - (False, "in_progress") - Already scraping
+            - (False, "no_data") - No groups in database
+        """
+        # Check for existing groups
+        group_ids = self.db.get_all_group_ids()
+        if not group_ids:
+            return False, "no_data"
+
+        with self._scrape_lock:
+            if self._is_scraping:
+                return False, "in_progress"
+            self._is_scraping = True
+            self._refresh_type = "matches"
+            self._last_scrape_error = None
+            self._refresh_result = None
+
+        def do_match_scrape():
+            try:
+                print("[*] Background match refresh started...")
+                known_team_ids = self.db.get_all_team_ids()
+                result = self.scraper.scrape_matches_only(
+                    group_ids=group_ids,
+                    known_team_ids=known_team_ids
+                )
+                self._refresh_result = result
+                print("[+] Background match refresh completed")
+            except Exception as e:
+                self._last_scrape_error = str(e)
+                print(f"[!] Background match refresh failed: {e}")
+                import traceback
+                traceback.print_exc()
+            finally:
+                self._is_scraping = False
+                self._refresh_type = None
+
+        self._executor.submit(do_match_scrape)
+        return True, "started"
+
+    def get_refresh_type(self) -> Optional[str]:
+        """Get the type of current/last refresh ("full" | "matches" | None)."""
+        return self._refresh_type
+
+    def get_refresh_result(self) -> Optional[Dict[str, Any]]:
+        """Get the result of the last match refresh (missing data info)."""
+        return self._refresh_result
 
     def get_last_scrape_error(self) -> Optional[str]:
         """Get the last scrape error message, if any."""

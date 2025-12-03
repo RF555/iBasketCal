@@ -615,3 +615,151 @@ footer {
         min-width: 100%;
     }
 }
+
+/* ============================================
+   REFRESH BUTTONS
+   ============================================ */
+
+.refresh-buttons {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin: 15px 0;
+}
+
+.btn-refresh-matches {
+    background: linear-gradient(135deg, var(--success-color), #1b5e20);
+    color: white;
+    padding: 12px 28px;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 3px 8px rgba(46, 125, 50, 0.3);
+    transition: all 0.3s;
+}
+
+.btn-refresh-matches:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(46, 125, 50, 0.4);
+}
+
+.btn-refresh-matches:disabled {
+    background: linear-gradient(135deg, #9e9e9e, #757575);
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-full-refresh {
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-full-refresh:hover:not(:disabled) {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: var(--text-secondary);
+}
+
+.btn-full-refresh:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ============================================
+   MODALS
+   ============================================ */
+
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal.visible {
+    display: flex;
+}
+
+.modal-content {
+    background: var(--card-background);
+    padding: 24px;
+    border-radius: 12px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.modal-content h3 {
+    margin: 0 0 16px 0;
+    color: var(--text-color);
+    font-size: 1.25rem;
+}
+
+.modal-content p {
+    margin: 0 0 12px 0;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.modal-duration {
+    font-weight: 600;
+    color: #f57c00 !important;
+}
+
+.modal-hint {
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    justify-content: flex-end;
+}
+
+.btn-cancel {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.btn-cancel:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.btn-confirm {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.btn-confirm:hover {
+    background: var(--primary-dark);
+}
+
+/* RTL support for modals */
+[dir="rtl"] .modal-actions {
+    flex-direction: row-reverse;
+}

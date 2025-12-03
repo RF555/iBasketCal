@@ -47,9 +47,13 @@ DB_TYPE = _get_str('DB_TYPE', 'sqlite')
 # =============================================================================
 # CACHE SETTINGS
 # =============================================================================
-# How long before cache is considered stale (in minutes)
+# How long before full cache is considered stale (in minutes)
 # Default: 7 days (10080 minutes)
 CACHE_TTL_MINUTES = _get_int('CACHE_TTL_MINUTES', 10080)
+
+# How long before match-only cache is considered stale (in minutes)
+# Default: 3 days (4320 minutes)
+MATCH_CACHE_TTL_MINUTES = _get_int('MATCH_CACHE_TTL_MINUTES', 4320)
 
 # Cache directory path
 # Priority: DATA_DIR > RAILWAY_VOLUME_MOUNT_PATH > /app/cache (container) > cache (local)
