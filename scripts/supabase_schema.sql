@@ -106,28 +106,53 @@ CREATE INDEX IF NOT EXISTS idx_competitions_season ON competitions(season_id);
 CREATE INDEX IF NOT EXISTS idx_teams_name ON teams(name);
 
 -- ============================================================================
--- ROW LEVEL SECURITY (RLS) - Optional but recommended
+-- ROW LEVEL SECURITY (RLS)
 -- ============================================================================
--- Uncomment the following lines to enable public read access
--- This is useful for public calendar data
+-- Enables public read access for all tables
+-- Backend must use service_role key for write operations
+-- Find service_role key in: Supabase Dashboard → Settings → API
 
--- ALTER TABLE seasons ENABLE ROW LEVEL SECURITY;
--- CREATE POLICY "Public read access" ON seasons FOR SELECT USING (true);
+-- Metadata table
+ALTER TABLE metadata ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read access" ON metadata FOR SELECT USING (true);
+CREATE POLICY "Service role full access" ON metadata FOR ALL
+    USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
--- ALTER TABLE competitions ENABLE ROW LEVEL SECURITY;
--- CREATE POLICY "Public read access" ON competitions FOR SELECT USING (true);
+-- Seasons table
+ALTER TABLE seasons ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read access" ON seasons FOR SELECT USING (true);
+CREATE POLICY "Service role full access" ON seasons FOR ALL
+    USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
--- ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
--- CREATE POLICY "Public read access" ON groups FOR SELECT USING (true);
+-- Competitions table
+ALTER TABLE competitions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read access" ON competitions FOR SELECT USING (true);
+CREATE POLICY "Service role full access" ON competitions FOR ALL
+    USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
--- ALTER TABLE matches ENABLE ROW LEVEL SECURITY;
--- CREATE POLICY "Public read access" ON matches FOR SELECT USING (true);
+-- Groups table
+ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read access" ON groups FOR SELECT USING (true);
+CREATE POLICY "Service role full access" ON groups FOR ALL
+    USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
--- ALTER TABLE teams ENABLE ROW LEVEL SECURITY;
--- CREATE POLICY "Public read access" ON teams FOR SELECT USING (true);
+-- Matches table
+ALTER TABLE matches ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read access" ON matches FOR SELECT USING (true);
+CREATE POLICY "Service role full access" ON matches FOR ALL
+    USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
--- ALTER TABLE standings ENABLE ROW LEVEL SECURITY;
--- CREATE POLICY "Public read access" ON standings FOR SELECT USING (true);
+-- Teams table
+ALTER TABLE teams ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read access" ON teams FOR SELECT USING (true);
+CREATE POLICY "Service role full access" ON teams FOR ALL
+    USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+
+-- Standings table
+ALTER TABLE standings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read access" ON standings FOR SELECT USING (true);
+CREATE POLICY "Service role full access" ON standings FOR ALL
+    USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
 -- ============================================================================
 -- INITIAL METADATA
