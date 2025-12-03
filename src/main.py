@@ -84,17 +84,18 @@ refresh_rate_limiter = RateLimiter(cooldown_seconds=config.REFRESH_COOLDOWN_SECO
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    # Startup: Log cache status but don't auto-scrape
-    # Auto-scrape disabled to prevent memory issues on free tier hosting
-    # Trigger scrape manually via POST /api/refresh or run locally
+    # Startup: Check cache status
+    # - If no cache exists: don't auto-scrape (too memory-intensive for free tier)
+    # - If cache is stale: auto-refresh in background (lighter operation)
     print("[*] Checking cache status...")
     cache_info = data_service.get_cache_info()
 
     if not cache_info['exists']:
-        print("[*] No cache found. Scrape manually via POST /api/refresh or run locally.")
+        print("[*] No cache found. Run initial scrape locally or via POST /api/refresh")
     elif cache_info['stale']:
         print(f"[*] Cache is stale (last updated: {cache_info['last_updated']})")
-        print("[*] Refresh manually via POST /api/refresh when ready.")
+        print("[*] Starting background refresh...")
+        data_service.refresh_async()
     else:
         print(f"[+] Cache is fresh (last updated: {cache_info['last_updated']})")
 
