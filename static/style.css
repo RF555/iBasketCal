@@ -368,6 +368,35 @@ section h2 {
     flex-direction: row-reverse;
 }
 
+/* Timezone Row */
+.timezone-row {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+
+.timezone-row > label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--primary-color);
+}
+
+.timezone-row select {
+    width: 100%;
+    max-width: 250px;
+    padding: 8px 10px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 1rem;
+    background-color: white;
+}
+
+.timezone-row select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
 /* Matches Preview */
 .matches-list {
     max-height: 300px;

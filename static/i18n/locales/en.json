@@ -88,6 +88,9 @@
       "label": "Time format:",
       "24h": "24 hour (21:00)",
       "12h": "AM/PM (9:00 PM)"
+    },
+    "timezone": {
+      "label": "Timezone:"
     }
   },
   "toast": {

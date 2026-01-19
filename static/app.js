@@ -26,7 +26,8 @@ let state = {
     prepHours: 1,      // 0-3
     prepMinutes: 0,    // 0, 15, 30, 45
     prepTime: 60,      // total minutes (calculated)
-    timeFormat: '24h'  // '24h' or '12h'
+    timeFormat: '24h', // '24h' or '12h'
+    timezone: 'Asia/Jerusalem'  // IANA timezone
 };
 
 // Store last cache info for re-render on language change
@@ -49,6 +50,7 @@ const elements = {
     prepMinutesSelect: document.getElementById('prep-minutes-select'),
     timeFormat24h: document.getElementById('time-format-24h'),
     timeFormat12h: document.getElementById('time-format-12h'),
+    timezoneSelect: document.getElementById('timezone-select'),
 
     // Preview
     matchesPreview: document.getElementById('matches-preview'),
@@ -312,6 +314,7 @@ function setupEventListeners() {
     elements.prepMinutesSelect.addEventListener('change', onPrepTimeChange);
     elements.timeFormat24h.addEventListener('change', onTimeFormatChange);
     elements.timeFormat12h.addEventListener('change', onTimeFormatChange);
+    elements.timezoneSelect.addEventListener('change', onTimezoneChange);
 
     // Copy button
     elements.copyBtn.addEventListener('click', copyCalendarUrl);
@@ -439,6 +442,11 @@ function onPrepTimeChange() {
     }
 
     updateCalendarUrl();
+
+    // Re-render preview to show updated event start times
+    if (state.matches.length > 0) {
+        displayMatches(state.matches);
+    }
 }
 
 // Time format change handler
@@ -447,6 +455,17 @@ function onTimeFormatChange(event) {
     updateCalendarUrl();
 
     // Re-render matches to show updated time format
+    if (state.matches.length > 0) {
+        displayMatches(state.matches);
+    }
+}
+
+// Timezone change handler
+function onTimezoneChange(event) {
+    state.timezone = event.target.value;
+    updateCalendarUrl();
+
+    // Re-render matches to show updated timezone
     if (state.matches.length > 0) {
         displayMatches(state.matches);
     }
@@ -544,10 +563,20 @@ function displayMatches(matches) {
     elements.matchesPreview.innerHTML = matches.slice(0, 100).map(match => {
         const home = match.homeTeam?.name || 'TBD';
         const away = match.awayTeam?.name || 'TBD';
-        const date = formatDate(match.date);
         const gameTime = formatGameTime(match.date);
         const status = getStatusDisplay(match);
         const location = match.court?.place || '';
+
+        // In player mode, event starts prep time before game
+        // Calculate event start time and format accordingly
+        let eventDate;
+        if (state.mode === 'player' && match.date) {
+            const gameDate = new Date(match.date);
+            const eventStart = new Date(gameDate.getTime() - state.prepTime * 60 * 1000);
+            eventDate = formatDate(eventStart.toISOString());
+        } else {
+            eventDate = formatDate(match.date);
+        }
 
         // Build teams string with optional game time prefix for player mode
         let teams;
@@ -572,7 +601,7 @@ function displayMatches(matches) {
             <div class="match-item">
                 <div>
                     <div class="match-teams">${teams}</div>
-                    <div class="match-meta">${date}${location ? ' | ' + location : ''}</div>
+                    <div class="match-meta">${eventDate}${location ? ' | ' + location : ''}</div>
                 </div>
                 <span class="match-status ${status.class}">${status.text}</span>
             </div>
@@ -585,24 +614,19 @@ function displayMatches(matches) {
     });
 }
 
-// Format game time based on selected time format
+// Format game time based on selected time format and timezone
 function formatGameTime(dateStr) {
     if (!dateStr) return '';
     const date = new Date(dateStr);
 
-    if (state.timeFormat === '12h') {
-        return date.toLocaleTimeString(getLocale(), {
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        });
-    }
-    // Default: 24-hour format
-    return date.toLocaleTimeString(getLocale(), {
-        hour: '2-digit',
+    const options = {
+        hour: state.timeFormat === '12h' ? 'numeric' : '2-digit',
         minute: '2-digit',
-        hour12: false
-    });
+        hour12: state.timeFormat === '12h',
+        timeZone: state.timezone
+    };
+
+    return date.toLocaleTimeString(getLocale(), options);
 }
 
 // Get score for a team
@@ -646,11 +670,12 @@ function updateCalendarUrl() {
     if (state.filters.leagueName) params.set('competition', state.filters.leagueName);
     if (state.filters.teamName) params.set('team', state.filters.teamName);
 
-    // Add mode, prep time, and time format parameters for player mode
+    // Add mode, prep time, time format, and timezone parameters for player mode
     if (state.mode === 'player') {
         params.set('mode', 'player');
         params.set('prep', state.prepTime.toString());
         params.set('tf', state.timeFormat);  // '24h' or '12h'
+        params.set('tz', state.timezone);    // IANA timezone
     }
 
     const baseUrl = window.location.origin;

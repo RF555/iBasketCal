@@ -307,10 +307,11 @@ class TestCalendarEndpointPlayerMode:
         }]
 
         with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
-            response = client.get("/calendar.ics?mode=player&prep=60")
+            # Use tz=UTC to test player mode without timezone conversion
+            response = client.get("/calendar.ics?mode=player&prep=60&tz=UTC")
 
             assert response.status_code == 200
-            # Should have time prefix in player mode
+            # Should have time prefix in player mode (20:00 UTC)
             assert '20:00' in response.text
 
     def test_calendar_endpoint_invalid_mode_defaults_to_fan(self):
@@ -379,14 +380,14 @@ class TestCalendarEndpointTimeFormat:
         """Default time format is 24h."""
         sample_matches = [{
             'id': 'm1',
-            'date': '2024-10-15T21:00:00Z',  # 9 PM
+            'date': '2024-10-15T21:00:00Z',  # 9 PM UTC
             'homeTeam': {'id': 't1', 'name': 'A'},
             'awayTeam': {'id': 't2', 'name': 'B'},
             'court': {}
         }]
 
         with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
-            response = client.get("/calendar.ics?mode=player&prep=60")
+            response = client.get("/calendar.ics?mode=player&prep=60&tz=UTC")
 
             assert response.status_code == 200
             assert '21:00' in response.text
@@ -395,14 +396,14 @@ class TestCalendarEndpointTimeFormat:
         """24h time format when explicitly specified."""
         sample_matches = [{
             'id': 'm1',
-            'date': '2024-10-15T14:30:00Z',  # 2:30 PM
+            'date': '2024-10-15T14:30:00Z',  # 2:30 PM UTC
             'homeTeam': {'id': 't1', 'name': 'A'},
             'awayTeam': {'id': 't2', 'name': 'B'},
             'court': {}
         }]
 
         with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
-            response = client.get("/calendar.ics?mode=player&prep=60&tf=24h")
+            response = client.get("/calendar.ics?mode=player&prep=60&tf=24h&tz=UTC")
 
             assert response.status_code == 200
             assert '14:30' in response.text
@@ -411,14 +412,14 @@ class TestCalendarEndpointTimeFormat:
         """12h time format works correctly."""
         sample_matches = [{
             'id': 'm1',
-            'date': '2024-10-15T21:00:00Z',  # 9 PM
+            'date': '2024-10-15T21:00:00Z',  # 9 PM UTC
             'homeTeam': {'id': 't1', 'name': 'A'},
             'awayTeam': {'id': 't2', 'name': 'B'},
             'court': {}
         }]
 
         with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
-            response = client.get("/calendar.ics?mode=player&prep=60&tf=12h")
+            response = client.get("/calendar.ics?mode=player&prep=60&tf=12h&tz=UTC")
 
             assert response.status_code == 200
             assert '9:00 PM' in response.text
@@ -434,7 +435,7 @@ class TestCalendarEndpointTimeFormat:
         }]
 
         with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
-            response = client.get("/calendar.ics?mode=player&prep=60&tf=invalid")
+            response = client.get("/calendar.ics?mode=player&prep=60&tf=invalid&tz=UTC")
 
             assert response.status_code == 200
             # Should use 24h format as fallback

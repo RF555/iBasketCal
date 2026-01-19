@@ -6,7 +6,11 @@ Creates RFC 5545 compliant iCalendar files for Israeli basketball games.
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
+from zoneinfo import ZoneInfo
 import hashlib
+
+# Default timezone for display
+DEFAULT_TIMEZONE = "Asia/Jerusalem"
 
 
 class CalendarService:
@@ -22,7 +26,8 @@ class CalendarService:
         calendar_name: str = "Israeli Basketball",
         player_mode: bool = False,
         prep_time_minutes: int = 60,
-        time_format: str = "24h"
+        time_format: str = "24h",
+        display_timezone: str = DEFAULT_TIMEZONE
     ) -> str:
         """
         Generate ICS calendar content from matches.
@@ -33,10 +38,16 @@ class CalendarService:
             player_mode: If True, events start prep_time_minutes before game
             prep_time_minutes: Minutes of prep time before game (player mode only)
             time_format: Time format for event title: '24h' or '12h'
+            display_timezone: IANA timezone for displayed times in player mode
 
         Returns:
             ICS file content as string
         """
+        # Validate timezone, fallback to default if invalid
+        try:
+            ZoneInfo(display_timezone)
+        except (KeyError, ValueError):
+            display_timezone = DEFAULT_TIMEZONE
         lines = [
             "BEGIN:VCALENDAR",
             "VERSION:2.0",
@@ -51,7 +62,7 @@ class CalendarService:
         lines.extend(self._get_timezone_component())
 
         for match in matches:
-            event = self._match_to_vevent(match, player_mode, prep_time_minutes, time_format)
+            event = self._match_to_vevent(match, player_mode, prep_time_minutes, time_format, display_timezone)
             lines.extend(event)
 
         lines.append("END:VCALENDAR")
@@ -87,7 +98,8 @@ class CalendarService:
         match: Dict[str, Any],
         player_mode: bool = False,
         prep_time_minutes: int = 60,
-        time_format: str = "24h"
+        time_format: str = "24h",
+        display_timezone: str = DEFAULT_TIMEZONE
     ) -> List[str]:
         """
         Convert a match to VEVENT lines.
@@ -97,6 +109,7 @@ class CalendarService:
             player_mode: If True, adjust timing for player preparation
             prep_time_minutes: Minutes before game for event start (player mode)
             time_format: Time format for event title: '24h' or '12h'
+            display_timezone: IANA timezone for displayed times in player mode
         """
         match_id = match.get('id', 'unknown')
 
@@ -119,17 +132,20 @@ class CalendarService:
         except (ValueError, TypeError):
             dt = datetime.now(timezone.utc)
 
-        # Store 24h format for description (always consistent)
-        game_time_24h = dt.strftime("%H:%M")
+        # Convert to display timezone for the game time shown in title/description
+        local_dt = dt.astimezone(ZoneInfo(display_timezone))
+
+        # Store 24h format for description (always consistent, in local time)
+        game_time_24h = local_dt.strftime("%H:%M")
 
         # Format game time for summary based on time_format preference
         if time_format == '12h':
-            hour = dt.hour
+            hour = local_dt.hour
             am_pm = 'AM' if hour < 12 else 'PM'
             hour_12 = hour % 12
             if hour_12 == 0:
                 hour_12 = 12
-            game_time_str = f"{hour_12}:{dt.strftime('%M')} {am_pm}"
+            game_time_str = f"{hour_12}:{local_dt.strftime('%M')} {am_pm}"
         else:
             # Default: 24-hour format
             game_time_str = game_time_24h

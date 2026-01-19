@@ -459,9 +459,9 @@ class TestPlayerMode:
             'court': {}
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60)
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, display_timezone='UTC')
 
-        # Summary should include time
+        # Summary should include time (UTC)
         assert 'SUMMARY:21:00 Team A vs Team B' in ics
 
     def test_player_mode_uid_includes_mode(self):
@@ -491,7 +491,7 @@ class TestPlayerMode:
             'court': {}
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=90)
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=90, display_timezone='UTC')
 
         unfolded = ics.replace('\r\n ', '')
         assert 'Game Time: 20:30' in unfolded
@@ -514,7 +514,7 @@ class TestPlayerMode:
             }
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60)
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, display_timezone='UTC')
 
         assert 'SUMMARY:19:00 Home Team (92) vs Away Team (88)' in ics
 
@@ -570,7 +570,7 @@ class TestPlayerMode:
             'court': {}
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60)
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, display_timezone='UTC')
 
         assert 'SUMMARY:18:00 LIVE: Team A vs Team B' in ics
 
@@ -593,7 +593,7 @@ class TestTimeFormat:
             'court': {}
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60)
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, display_timezone='UTC')
 
         assert 'SUMMARY:21:00 Team A vs Team B' in ics
 
@@ -608,7 +608,7 @@ class TestTimeFormat:
             'court': {}
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='24h')
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='24h', display_timezone='UTC')
 
         assert 'SUMMARY:14:30 Team A vs Team B' in ics
 
@@ -623,7 +623,7 @@ class TestTimeFormat:
             'court': {}
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h')
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h', display_timezone='UTC')
 
         assert 'SUMMARY:9:00 PM Team A vs Team B' in ics
 
@@ -638,7 +638,7 @@ class TestTimeFormat:
             'court': {}
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h')
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h', display_timezone='UTC')
 
         assert 'SUMMARY:9:30 AM Team A vs Team B' in ics
 
@@ -653,7 +653,7 @@ class TestTimeFormat:
             'court': {}
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h')
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h', display_timezone='UTC')
 
         assert 'SUMMARY:12:00 PM Team A vs Team B' in ics
 
@@ -668,7 +668,7 @@ class TestTimeFormat:
             'court': {}
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h')
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h', display_timezone='UTC')
 
         assert 'SUMMARY:12:30 AM Team A vs Team B' in ics
 
@@ -689,7 +689,7 @@ class TestTimeFormat:
             }
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h')
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h', display_timezone='UTC')
 
         assert 'SUMMARY:7:00 PM Home Team (92) vs Away Team (88)' in ics
 
@@ -704,7 +704,7 @@ class TestTimeFormat:
             'court': {}
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h')
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h', display_timezone='UTC')
 
         assert 'SUMMARY:8:00 PM LIVE: Team A vs Team B' in ics
 
@@ -719,7 +719,7 @@ class TestTimeFormat:
             'court': {}
         }
 
-        ics = self.service.generate_ics([match], player_mode=False, time_format='12h')
+        ics = self.service.generate_ics([match], player_mode=False, time_format='12h', display_timezone='UTC')
 
         # Fan mode should NOT include time in summary
         assert 'SUMMARY:Team A vs Team B' in ics
@@ -736,8 +736,127 @@ class TestTimeFormat:
             'court': {}
         }
 
-        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=90, time_format='12h')
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=90, time_format='12h', display_timezone='UTC')
 
         # Description should still have 24h format for consistency
         unfolded = ics.replace('\r\n ', '')
         assert 'Game Time: 20:30' in unfolded
+
+
+class TestTimezoneConversion:
+    """Tests for timezone conversion in player mode."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = CalendarService()
+
+    def test_jerusalem_timezone_conversion(self):
+        """Times are converted to Jerusalem timezone."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T17:00:00Z',  # 5 PM UTC = 8 PM Jerusalem (UTC+3 in Oct)
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, display_timezone='Asia/Jerusalem')
+
+        # Should show Jerusalem time (UTC+3 in October = IDT)
+        assert 'SUMMARY:20:00 Team A vs Team B' in ics
+
+    def test_new_york_timezone_conversion(self):
+        """Times are converted to New York timezone."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T20:00:00Z',  # 8 PM UTC = 4 PM New York (UTC-4 in Oct)
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, display_timezone='America/New_York')
+
+        # Should show New York time (UTC-4 in October = EDT)
+        assert 'SUMMARY:16:00 Team A vs Team B' in ics
+
+    def test_utc_timezone_no_conversion(self):
+        """UTC timezone shows times as-is."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T19:30:00Z',
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, display_timezone='UTC')
+
+        assert 'SUMMARY:19:30 Team A vs Team B' in ics
+
+    def test_invalid_timezone_falls_back_to_jerusalem(self):
+        """Invalid timezone falls back to Jerusalem."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T17:00:00Z',  # 5 PM UTC = 8 PM Jerusalem
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, display_timezone='Invalid/Timezone')
+
+        # Should fall back to Jerusalem time
+        assert 'SUMMARY:20:00 Team A vs Team B' in ics
+
+    def test_default_timezone_is_jerusalem(self):
+        """Default timezone is Jerusalem when not specified."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T17:00:00Z',  # 5 PM UTC = 8 PM Jerusalem
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        # Don't pass display_timezone - should default to Jerusalem
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60)
+
+        # Should show Jerusalem time
+        assert 'SUMMARY:20:00 Team A vs Team B' in ics
+
+    def test_timezone_with_12h_format(self):
+        """Timezone conversion works with 12-hour format."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T17:00:00Z',  # 5 PM UTC = 8 PM Jerusalem
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h', display_timezone='Asia/Jerusalem')
+
+        assert 'SUMMARY:8:00 PM Team A vs Team B' in ics
+
+    def test_timezone_in_description(self):
+        """Description shows time in selected timezone."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T17:00:00Z',  # 5 PM UTC = 8 PM Jerusalem
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, display_timezone='Asia/Jerusalem')
+
+        unfolded = ics.replace('\r\n ', '')
+        assert 'Game Time: 20:00' in unfolded
