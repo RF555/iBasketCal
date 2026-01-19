@@ -72,6 +72,24 @@
     "noData": "אין נתונים - לחץ רענן",
     "staleData": "נתונים ישנים - לחץ רענן"
   },
+  "mode": {
+    "checkbox": {
+      "label": "מצב שחקן"
+    },
+    "player": {
+      "label": "שחקן"
+    },
+    "prepTime": {
+      "label": "זמן הכנה לפני המשחק:",
+      "hoursLabel": "שעות",
+      "minutesLabel": "דק׳"
+    },
+    "timeFormat": {
+      "label": "פורמט שעה:",
+      "24h": "24 שעות (21:00)",
+      "12h": "AM/PM (9:00 PM)"
+    }
+  },
   "toast": {
     "copied": "הכתובת הועתקה!",
     "refreshInProgress": "רענון כבר מתבצע, אנא המתן...",

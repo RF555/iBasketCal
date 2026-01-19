@@ -59,6 +59,52 @@
                             <p class="filter-hint" data-i18n="filters.team.hint">Optional - leave empty for all teams in league</p>
                         </div>
                     </div>
+
+                    <div class="filter-step" id="mode-step">
+                        <div class="step-number">4</div>
+                        <div class="filter-group">
+                            <label class="checkbox-inline">
+                                <input type="checkbox" id="player-mode-checkbox">
+                                <span data-i18n="mode.checkbox.label">Player Mode</span>
+                            </label>
+
+                            <div id="prep-time-container" class="prep-time-container" style="display: none;">
+                                <div class="prep-time-row">
+                                    <label data-i18n="mode.prepTime.label">Prep time before game:</label>
+                                    <div class="prep-time-selects">
+                                        <select id="prep-hours-select">
+                                            <option value="0">0</option>
+                                            <option value="1" selected>1</option>
+                                            <option value="2">2</option>
+                                            <option value="3">3</option>
+                                        </select>
+                                        <span data-i18n="mode.prepTime.hoursLabel">hours</span>
+                                        <select id="prep-minutes-select">
+                                            <option value="0" selected>0</option>
+                                            <option value="15">15</option>
+                                            <option value="30">30</option>
+                                            <option value="45">45</option>
+                                        </select>
+                                        <span data-i18n="mode.prepTime.minutesLabel">min</span>
+                                    </div>
+                                </div>
+
+                                <div class="time-format-row">
+                                    <label data-i18n="mode.timeFormat.label">Time format:</label>
+                                    <div class="time-format-options">
+                                        <label class="radio-inline">
+                                            <input type="radio" name="time-format" value="24h" id="time-format-24h" checked>
+                                            <span data-i18n="mode.timeFormat.24h">24 hour (21:00)</span>
+                                        </label>
+                                        <label class="radio-inline">
+                                            <input type="radio" name="time-format" value="12h" id="time-format-12h">
+                                            <span data-i18n="mode.timeFormat.12h">AM/PM (9:00 PM)</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
             </section>

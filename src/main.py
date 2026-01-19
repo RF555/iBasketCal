@@ -229,17 +229,36 @@ async def get_teams(
 async def get_calendar(
     season: Optional[str] = Query(None, description="Season ID"),
     competition: Optional[str] = Query(None, description="Competition name filter"),
-    team: Optional[str] = Query(None, description="Team name filter")
+    team: Optional[str] = Query(None, description="Team name filter"),
+    mode: Optional[str] = Query("fan", description="Calendar mode: 'fan' or 'player'"),
+    prep: Optional[int] = Query(60, ge=15, le=180, description="Prep time in minutes for player mode (15-180)"),
+    tf: Optional[str] = Query("24h", description="Time format in event title: '24h' or '12h'")
 ):
     """
     Generate ICS calendar feed with all season games.
 
+    Args:
+        season: Filter by season ID
+        competition: Filter by competition name
+        team: Filter by team name
+        mode: 'fan' (default) - events at game time, 'player' - events include prep time
+        prep: Prep time in minutes for player mode (15-180, default 60)
+        tf: Time format for event title: '24h' (default) or '12h' (AM/PM)
+
     Example URLs:
-    - /calendar.ics - All games for the season
-    - /calendar.ics?team=Maccabi - All games for a team
-    - /calendar.ics?competition=Premier%20League - Premier League games
+    - /calendar.ics - All games for the season (fan mode)
+    - /calendar.ics?mode=player&prep=60 - Player mode with 60 min prep time
+    - /calendar.ics?mode=player&prep=90&tf=12h - Player mode with 12h time format
     """
     try:
+        # Validate mode
+        if mode not in ('fan', 'player'):
+            mode = 'fan'
+
+        # Validate time format
+        if tf not in ('24h', '12h'):
+            tf = '24h'
+
         # Get matches with filters
         matches = data_service.get_all_matches(
             season_id=season,
@@ -253,10 +272,18 @@ async def get_calendar(
             name_parts.append(competition)
         if team:
             name_parts.append(team)
+        if mode == 'player':
+            name_parts.append("Player")
         calendar_name = " - ".join(name_parts)
 
-        # Generate ICS content
-        ics_content = calendar_service.generate_ics(matches, calendar_name)
+        # Generate ICS content with mode parameters
+        ics_content = calendar_service.generate_ics(
+            matches,
+            calendar_name,
+            player_mode=(mode == 'player'),
+            prep_time_minutes=prep if mode == 'player' else 0,
+            time_format=tf
+        )
 
         return Response(
             content=ics_content,

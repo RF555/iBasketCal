@@ -421,3 +421,323 @@ class TestEdgeCases:
 
         ics = self.service.generate_ics([match_live])
         assert 'SEQUENCE:2' in ics
+
+
+class TestPlayerMode:
+    """Tests for player mode calendar generation."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = CalendarService()
+
+    def test_player_mode_event_timing(self):
+        """Event starts prep_time before game in player mode."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T20:00:00Z',  # 8 PM game
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60)
+
+        # Event should start at 7 PM (60 min before)
+        assert 'DTSTART:20241015T190000Z' in ics
+        # Event should end at 10 PM (game end = game time + 2hr)
+        assert 'DTEND:20241015T220000Z' in ics
+
+    def test_player_mode_summary_includes_game_time(self):
+        """Summary includes actual game time in player mode."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T21:00:00Z',  # 9 PM game (UTC)
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60)
+
+        # Summary should include time
+        assert 'SUMMARY:21:00 Team A vs Team B' in ics
+
+    def test_player_mode_uid_includes_mode(self):
+        """UID differentiates player mode calendars."""
+        match = {
+            'id': 'match123',
+            'date': '2024-10-15T18:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }
+
+        ics_fan = self.service.generate_ics([match], player_mode=False)
+        ics_player = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60)
+
+        assert 'UID:match123@ibasketball.calendar' in ics_fan
+        assert 'UID:match123-player60@ibasketball.calendar' in ics_player
+
+    def test_player_mode_description_includes_prep_info(self):
+        """Description includes game time and prep time in player mode."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T20:30:00Z',
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=90)
+
+        unfolded = ics.replace('\r\n ', '')
+        assert 'Game Time: 20:30' in unfolded
+        assert 'Prep Time: 90 minutes' in unfolded
+
+    def test_player_mode_with_scores(self):
+        """Player mode handles completed games with scores."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T19:00:00Z',
+            'status': 'CLOSED',
+            'homeTeam': {'id': 'home', 'name': 'Home Team'},
+            'awayTeam': {'id': 'away', 'name': 'Away Team'},
+            'court': {},
+            'score': {
+                'totals': [
+                    {'teamId': 'home', 'total': 92},
+                    {'teamId': 'away', 'total': 88}
+                ]
+            }
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60)
+
+        assert 'SUMMARY:19:00 Home Team (92) vs Away Team (88)' in ics
+
+    def test_fan_mode_unchanged(self):
+        """Fan mode (default) behavior unchanged."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T20:00:00Z',
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=False)
+
+        # Should start at game time, not before
+        assert 'DTSTART:20241015T200000Z' in ics
+        assert 'DTEND:20241015T220000Z' in ics
+        # Summary should NOT include time prefix
+        assert 'SUMMARY:Team A vs Team B' in ics
+
+    def test_various_prep_times(self):
+        """Different prep times work correctly."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T20:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }
+
+        # 15 minutes prep
+        ics_15 = self.service.generate_ics([match], player_mode=True, prep_time_minutes=15)
+        assert 'DTSTART:20241015T194500Z' in ics_15  # 19:45
+
+        # 120 minutes prep (2 hours)
+        ics_120 = self.service.generate_ics([match], player_mode=True, prep_time_minutes=120)
+        assert 'DTSTART:20241015T180000Z' in ics_120  # 18:00
+
+        # 180 minutes prep (3 hours)
+        ics_180 = self.service.generate_ics([match], player_mode=True, prep_time_minutes=180)
+        assert 'DTSTART:20241015T170000Z' in ics_180  # 17:00
+
+    def test_player_mode_live_game(self):
+        """Player mode handles live games."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T18:00:00Z',
+            'status': 'LIVE',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60)
+
+        assert 'SUMMARY:18:00 LIVE: Team A vs Team B' in ics
+
+
+class TestTimeFormat:
+    """Tests for time format selection in player mode."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = CalendarService()
+
+    def test_time_format_24h_default(self):
+        """24-hour format is default."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T21:00:00Z',  # 9 PM UTC
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60)
+
+        assert 'SUMMARY:21:00 Team A vs Team B' in ics
+
+    def test_time_format_24h_explicit(self):
+        """24-hour format when explicitly specified."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T14:30:00Z',  # 2:30 PM UTC
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='24h')
+
+        assert 'SUMMARY:14:30 Team A vs Team B' in ics
+
+    def test_time_format_12h_pm(self):
+        """12-hour format for PM times."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T21:00:00Z',  # 9 PM UTC
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h')
+
+        assert 'SUMMARY:9:00 PM Team A vs Team B' in ics
+
+    def test_time_format_12h_am(self):
+        """12-hour format for AM times."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T09:30:00Z',  # 9:30 AM UTC
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h')
+
+        assert 'SUMMARY:9:30 AM Team A vs Team B' in ics
+
+    def test_time_format_12h_noon(self):
+        """12-hour format for noon."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T12:00:00Z',  # 12 PM (noon) UTC
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h')
+
+        assert 'SUMMARY:12:00 PM Team A vs Team B' in ics
+
+    def test_time_format_12h_midnight(self):
+        """12-hour format for midnight."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T00:30:00Z',  # 12:30 AM (midnight) UTC
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h')
+
+        assert 'SUMMARY:12:30 AM Team A vs Team B' in ics
+
+    def test_time_format_12h_with_scores(self):
+        """12-hour format with completed game scores."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T19:00:00Z',  # 7 PM UTC
+            'status': 'CLOSED',
+            'homeTeam': {'id': 'home', 'name': 'Home Team'},
+            'awayTeam': {'id': 'away', 'name': 'Away Team'},
+            'court': {},
+            'score': {
+                'totals': [
+                    {'teamId': 'home', 'total': 92},
+                    {'teamId': 'away', 'total': 88}
+                ]
+            }
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h')
+
+        assert 'SUMMARY:7:00 PM Home Team (92) vs Away Team (88)' in ics
+
+    def test_time_format_12h_live_game(self):
+        """12-hour format with live game."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T20:00:00Z',  # 8 PM UTC
+            'status': 'LIVE',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=60, time_format='12h')
+
+        assert 'SUMMARY:8:00 PM LIVE: Team A vs Team B' in ics
+
+    def test_time_format_fan_mode_ignored(self):
+        """Time format parameter doesn't affect fan mode."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T20:00:00Z',
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=False, time_format='12h')
+
+        # Fan mode should NOT include time in summary
+        assert 'SUMMARY:Team A vs Team B' in ics
+        assert '8:00 PM' not in ics
+
+    def test_time_format_description_uses_24h(self):
+        """Description always uses 24-hour format for clarity."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T20:30:00Z',  # 8:30 PM UTC
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=True, prep_time_minutes=90, time_format='12h')
+
+        # Description should still have 24h format for consistency
+        unfolded = ics.replace('\r\n ', '')
+        assert 'Game Time: 20:30' in unfolded

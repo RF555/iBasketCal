@@ -72,6 +72,24 @@
     "noData": "No data - click refresh",
     "staleData": "Stale data - click refresh"
   },
+  "mode": {
+    "checkbox": {
+      "label": "Player Mode"
+    },
+    "player": {
+      "label": "Player"
+    },
+    "prepTime": {
+      "label": "Prep time before game:",
+      "hoursLabel": "hours",
+      "minutesLabel": "min"
+    },
+    "timeFormat": {
+      "label": "Time format:",
+      "24h": "24 hour (21:00)",
+      "12h": "AM/PM (9:00 PM)"
+    }
+  },
   "toast": {
     "copied": "URL copied!",
     "refreshInProgress": "Refresh already in progress, please wait...",
