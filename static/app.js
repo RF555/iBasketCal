@@ -20,7 +20,13 @@ let state = {
         leagueName: '',  // competition name for URL
         team: '',
         teamName: ''
-    }
+    },
+    // Calendar mode settings
+    mode: 'fan',       // 'fan' or 'player'
+    prepHours: 1,      // 0-3
+    prepMinutes: 0,    // 0, 15, 30, 45
+    prepTime: 60,      // total minutes (calculated)
+    timeFormat: '24h'  // '24h' or '12h'
 };
 
 // Store last cache info for re-render on language change
@@ -34,6 +40,15 @@ const elements = {
     teamSelect: document.getElementById('team-select'),
     leagueStep: document.getElementById('league-step'),
     teamStep: document.getElementById('team-step'),
+    modeStep: document.getElementById('mode-step'),
+
+    // Mode selection
+    playerModeCheckbox: document.getElementById('player-mode-checkbox'),
+    prepTimeContainer: document.getElementById('prep-time-container'),
+    prepHoursSelect: document.getElementById('prep-hours-select'),
+    prepMinutesSelect: document.getElementById('prep-minutes-select'),
+    timeFormat24h: document.getElementById('time-format-24h'),
+    timeFormat12h: document.getElementById('time-format-12h'),
 
     // Preview
     matchesPreview: document.getElementById('matches-preview'),
@@ -96,7 +111,11 @@ window.addEventListener('languageChanged', () => {
     if (lastCacheInfo) {
         updateCacheStatus(lastCacheInfo);
     }
+
+    // Update calendar URL to refresh calendar name translation
+    updateCalendarUrl();
 });
+
 
 // Load initial data
 async function loadInitialData() {
@@ -287,6 +306,13 @@ function setupEventListeners() {
     elements.leagueSelect.addEventListener('change', onLeagueChange);
     elements.teamSelect.addEventListener('change', onTeamChange);
 
+    // Mode selection changes
+    elements.playerModeCheckbox.addEventListener('change', onModeChange);
+    elements.prepHoursSelect.addEventListener('change', onPrepTimeChange);
+    elements.prepMinutesSelect.addEventListener('change', onPrepTimeChange);
+    elements.timeFormat24h.addEventListener('change', onTimeFormatChange);
+    elements.timeFormat12h.addEventListener('change', onTimeFormatChange);
+
     // Copy button
     elements.copyBtn.addEventListener('click', copyCalendarUrl);
 
@@ -381,6 +407,51 @@ function onTeamChange() {
     loadMatches();
 }
 
+// Mode change handler
+function onModeChange(event) {
+    state.mode = event.target.checked ? 'player' : 'fan';
+
+    // Show/hide prep time dropdown based on mode
+    elements.prepTimeContainer.style.display = state.mode === 'player' ? 'block' : 'none';
+
+    updateStepStates();
+    updateCalendarUrl();
+
+    // Re-render matches to show/hide game time prefix
+    if (state.matches.length > 0) {
+        displayMatches(state.matches);
+    }
+}
+
+// Prep time change handler
+function onPrepTimeChange() {
+    state.prepHours = parseInt(elements.prepHoursSelect.value, 10);
+    state.prepMinutes = parseInt(elements.prepMinutesSelect.value, 10);
+
+    // Calculate total prep time in minutes
+    state.prepTime = state.prepHours * 60 + state.prepMinutes;
+
+    // Ensure minimum of 15 minutes when both are 0
+    if (state.prepTime === 0) {
+        state.prepMinutes = 15;
+        elements.prepMinutesSelect.value = '15';
+        state.prepTime = 15;
+    }
+
+    updateCalendarUrl();
+}
+
+// Time format change handler
+function onTimeFormatChange(event) {
+    state.timeFormat = event.target.value;
+    updateCalendarUrl();
+
+    // Re-render matches to show updated time format
+    if (state.matches.length > 0) {
+        displayMatches(state.matches);
+    }
+}
+
 // Update visual state of filter steps
 function updateStepStates() {
     const steps = document.querySelectorAll('.filter-step');
@@ -414,6 +485,19 @@ function updateStepStates() {
         step3.classList.add('completed');
     } else {
         step3.classList.add('active');
+    }
+
+    // Step 4: Mode (always active once league is selected)
+    const step4 = steps[3];
+    if (step4) {
+        step4.classList.remove('active', 'completed', 'disabled');
+        if (!state.filters.league) {
+            step4.classList.add('disabled');
+        } else if (state.mode === 'player') {
+            step4.classList.add('completed');
+        } else {
+            step4.classList.add('active');
+        }
     }
 }
 
@@ -461,15 +545,27 @@ function displayMatches(matches) {
         const home = match.homeTeam?.name || 'TBD';
         const away = match.awayTeam?.name || 'TBD';
         const date = formatDate(match.date);
+        const gameTime = formatGameTime(match.date);
         const status = getStatusDisplay(match);
         const location = match.court?.place || '';
 
-        let teams = `${home} ${t('match.versus')} ${away}`;
+        // Build teams string with optional game time prefix for player mode
+        let teams;
         if (match.status === 'CLOSED' && match.score?.totals) {
             const homeScore = getScore(match, 'home');
             const awayScore = getScore(match, 'away');
             // Use explicit score labels to avoid RTL confusion
-            teams = `${home} (${homeScore}) ${t('match.versus')} ${away} (${awayScore})`;
+            if (state.mode === 'player' && gameTime) {
+                teams = `${gameTime} ${home} (${homeScore}) ${t('match.versus')} ${away} (${awayScore})`;
+            } else {
+                teams = `${home} (${homeScore}) ${t('match.versus')} ${away} (${awayScore})`;
+            }
+        } else {
+            if (state.mode === 'player' && gameTime) {
+                teams = `${gameTime} ${home} ${t('match.versus')} ${away}`;
+            } else {
+                teams = `${home} ${t('match.versus')} ${away}`;
+            }
         }
 
         return `
@@ -486,6 +582,26 @@ function displayMatches(matches) {
     elements.matchesCount.textContent = t('preview.showingCount', {
         shown: Math.min(matches.length, 100),
         total: matches.length
+    });
+}
+
+// Format game time based on selected time format
+function formatGameTime(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+
+    if (state.timeFormat === '12h') {
+        return date.toLocaleTimeString(getLocale(), {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        });
+    }
+    // Default: 24-hour format
+    return date.toLocaleTimeString(getLocale(), {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
     });
 }
 
@@ -530,6 +646,13 @@ function updateCalendarUrl() {
     if (state.filters.leagueName) params.set('competition', state.filters.leagueName);
     if (state.filters.teamName) params.set('team', state.filters.teamName);
 
+    // Add mode, prep time, and time format parameters for player mode
+    if (state.mode === 'player') {
+        params.set('mode', 'player');
+        params.set('prep', state.prepTime.toString());
+        params.set('tf', state.timeFormat);  // '24h' or '12h'
+    }
+
     const baseUrl = window.location.origin;
     const calendarPath = '/calendar.ics';
     const queryString = params.toString();
@@ -553,6 +676,7 @@ function updateCalendarUrl() {
     const calendarNameParts = [t('header.title')];
     if (state.filters.leagueName) calendarNameParts.push(state.filters.leagueName);
     if (state.filters.teamName) calendarNameParts.push(state.filters.teamName);
+    if (state.mode === 'player') calendarNameParts.push(t('mode.player.label'));
     const calendarName = calendarNameParts.join(' - ');
 
     // Outlook 365 (work/school)

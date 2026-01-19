@@ -19,7 +19,10 @@ class CalendarService:
     def generate_ics(
         self,
         matches: List[Dict[str, Any]],
-        calendar_name: str = "Israeli Basketball"
+        calendar_name: str = "Israeli Basketball",
+        player_mode: bool = False,
+        prep_time_minutes: int = 60,
+        time_format: str = "24h"
     ) -> str:
         """
         Generate ICS calendar content from matches.
@@ -27,6 +30,9 @@ class CalendarService:
         Args:
             matches: List of match dicts from DataService
             calendar_name: Name for the calendar
+            player_mode: If True, events start prep_time_minutes before game
+            prep_time_minutes: Minutes of prep time before game (player mode only)
+            time_format: Time format for event title: '24h' or '12h'
 
         Returns:
             ICS file content as string
@@ -45,7 +51,7 @@ class CalendarService:
         lines.extend(self._get_timezone_component())
 
         for match in matches:
-            event = self._match_to_vevent(match)
+            event = self._match_to_vevent(match, player_mode, prep_time_minutes, time_format)
             lines.extend(event)
 
         lines.append("END:VCALENDAR")
@@ -76,12 +82,27 @@ class CalendarService:
             "END:VTIMEZONE",
         ]
 
-    def _match_to_vevent(self, match: Dict[str, Any]) -> List[str]:
-        """Convert a match to VEVENT lines."""
+    def _match_to_vevent(
+        self,
+        match: Dict[str, Any],
+        player_mode: bool = False,
+        prep_time_minutes: int = 60,
+        time_format: str = "24h"
+    ) -> List[str]:
+        """
+        Convert a match to VEVENT lines.
+
+        Args:
+            match: Match data dictionary
+            player_mode: If True, adjust timing for player preparation
+            prep_time_minutes: Minutes before game for event start (player mode)
+            time_format: Time format for event title: '24h' or '12h'
+        """
         match_id = match.get('id', 'unknown')
 
-        # Generate a stable UID based on match ID
-        uid = f"{match_id}@ibasketball.calendar"
+        # Generate a stable UID - include mode to differentiate calendars
+        uid_suffix = f"-player{prep_time_minutes}" if player_mode else ""
+        uid = f"{match_id}{uid_suffix}@ibasketball.calendar"
 
         # Parse date
         date_str = match.get('date', '')
@@ -98,9 +119,34 @@ class CalendarService:
         except (ValueError, TypeError):
             dt = datetime.now(timezone.utc)
 
+        # Store 24h format for description (always consistent)
+        game_time_24h = dt.strftime("%H:%M")
+
+        # Format game time for summary based on time_format preference
+        if time_format == '12h':
+            hour = dt.hour
+            am_pm = 'AM' if hour < 12 else 'PM'
+            hour_12 = hour % 12
+            if hour_12 == 0:
+                hour_12 = 12
+            game_time_str = f"{hour_12}:{dt.strftime('%M')} {am_pm}"
+        else:
+            # Default: 24-hour format
+            game_time_str = game_time_24h
+
+        # Calculate event times based on mode
+        if player_mode:
+            # Player mode: event starts prep_time before game, ends at game end (game + 2hr)
+            event_start = dt - timedelta(minutes=prep_time_minutes)
+            event_end = dt + timedelta(hours=2)
+        else:
+            # Fan mode: event is game duration (2 hours)
+            event_start = dt
+            event_end = dt + timedelta(hours=2)
+
         # Format times in UTC
-        dtstart = dt.strftime("%Y%m%dT%H%M%SZ")
-        dtend = (dt + timedelta(hours=2)).strftime("%Y%m%dT%H%M%SZ")
+        dtstart = event_start.strftime("%Y%m%dT%H%M%SZ")
+        dtend = event_end.strftime("%Y%m%dT%H%M%SZ")
         dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
         # Get team info
@@ -110,33 +156,53 @@ class CalendarService:
         away = away_team.get('name', 'TBD')
         status = match.get('status', '')
 
-        # Build summary based on match status
-        if status == 'CLOSED':
-            # Get scores for completed matches
-            scores = match.get('score', {}) or {}
-            totals = scores.get('totals', []) or []
-
-            home_score = 0
-            away_score = 0
-
-            for t in totals:
-                if isinstance(t, dict):
-                    team_id = t.get('teamId', '')
-                    total = t.get('total', 0)
-                    if team_id == home_team.get('id'):
-                        home_score = total
-                    elif team_id == away_team.get('id'):
-                        away_score = total
-
-            # Use explicit score labels to avoid RTL confusion
-            summary = f"{home} ({home_score}) vs {away} ({away_score})"
-        elif status == 'LIVE':
-            summary = f"LIVE: {home} vs {away}"
+        # Build summary based on match status and mode
+        if player_mode:
+            # Player mode: include game time in title
+            if status == 'CLOSED':
+                scores = match.get('score', {}) or {}
+                totals = scores.get('totals', []) or []
+                home_score = 0
+                away_score = 0
+                for t in totals:
+                    if isinstance(t, dict):
+                        team_id = t.get('teamId', '')
+                        total = t.get('total', 0)
+                        if team_id == home_team.get('id'):
+                            home_score = total
+                        elif team_id == away_team.get('id'):
+                            away_score = total
+                summary = f"{game_time_str} {home} ({home_score}) vs {away} ({away_score})"
+            elif status == 'LIVE':
+                summary = f"{game_time_str} LIVE: {home} vs {away}"
+            else:
+                summary = f"{game_time_str} {home} vs {away}"
         else:
-            summary = f"{home} vs {away}"
+            # Fan mode: original behavior (no time prefix)
+            if status == 'CLOSED':
+                scores = match.get('score', {}) or {}
+                totals = scores.get('totals', []) or []
+                home_score = 0
+                away_score = 0
+                for t in totals:
+                    if isinstance(t, dict):
+                        team_id = t.get('teamId', '')
+                        total = t.get('total', 0)
+                        if team_id == home_team.get('id'):
+                            home_score = total
+                        elif team_id == away_team.get('id'):
+                            away_score = total
+                summary = f"{home} ({home_score}) vs {away} ({away_score})"
+            elif status == 'LIVE':
+                summary = f"LIVE: {home} vs {away}"
+            else:
+                summary = f"{home} vs {away}"
 
-        # Build description
+        # Build description (always use 24h format for consistency)
         desc_parts = []
+        if player_mode:
+            desc_parts.append(f"Game Time: {game_time_24h}")
+            desc_parts.append(f"Prep Time: {prep_time_minutes} minutes")
         if match.get('_competition'):
             desc_parts.append(f"Competition: {match['_competition']}")
         if match.get('_group'):

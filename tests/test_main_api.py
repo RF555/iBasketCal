@@ -268,6 +268,197 @@ class TestCalendarEndpoint:
             assert 'max-age=900' in response.headers['cache-control']
 
 
+class TestCalendarEndpointPlayerMode:
+    """Tests for calendar endpoint with player mode."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_calendar_endpoint_default_fan_mode(self):
+        """Default mode is fan."""
+        sample_matches = [{
+            'id': 'm1',
+            'date': '2024-10-15T20:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }]
+
+        with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
+            response = client.get("/calendar.ics")
+
+            assert response.status_code == 200
+            # Should NOT have time prefix in fan mode
+            assert 'SUMMARY:A vs B' in response.text
+
+    def test_calendar_endpoint_player_mode(self):
+        """Player mode works correctly."""
+        sample_matches = [{
+            'id': 'm1',
+            'date': '2024-10-15T20:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }]
+
+        with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
+            response = client.get("/calendar.ics?mode=player&prep=60")
+
+            assert response.status_code == 200
+            # Should have time prefix in player mode
+            assert '20:00' in response.text
+
+    def test_calendar_endpoint_invalid_mode_defaults_to_fan(self):
+        """Invalid mode defaults to fan."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            response = client.get("/calendar.ics?mode=invalid")
+
+            assert response.status_code == 200
+
+    def test_calendar_endpoint_prep_time_validation_too_low(self):
+        """Prep time must be at least 15."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            response = client.get("/calendar.ics?mode=player&prep=5")
+
+            # FastAPI validation should reject
+            assert response.status_code == 422
+
+    def test_calendar_endpoint_prep_time_validation_too_high(self):
+        """Prep time must be at most 180."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            response = client.get("/calendar.ics?mode=player&prep=200")
+
+            # FastAPI validation should reject
+            assert response.status_code == 422
+
+    def test_calendar_endpoint_valid_prep_times(self):
+        """Valid prep times work correctly."""
+        sample_matches = [{
+            'id': 'm1',
+            'date': '2024-10-15T20:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }]
+
+        with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
+            # Test minimum valid prep time
+            response_15 = client.get("/calendar.ics?mode=player&prep=15")
+            assert response_15.status_code == 200
+
+            # Test maximum valid prep time
+            response_180 = client.get("/calendar.ics?mode=player&prep=180")
+            assert response_180.status_code == 200
+
+    def test_calendar_endpoint_player_mode_calendar_name(self):
+        """Player mode includes 'Player' in calendar name."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            response = client.get("/calendar.ics?mode=player&prep=60")
+
+            assert response.status_code == 200
+            assert 'Player' in response.text
+
+
+class TestCalendarEndpointTimeFormat:
+    """Tests for calendar endpoint with time format parameter."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_calendar_endpoint_time_format_default_24h(self):
+        """Default time format is 24h."""
+        sample_matches = [{
+            'id': 'm1',
+            'date': '2024-10-15T21:00:00Z',  # 9 PM
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }]
+
+        with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
+            response = client.get("/calendar.ics?mode=player&prep=60")
+
+            assert response.status_code == 200
+            assert '21:00' in response.text
+
+    def test_calendar_endpoint_time_format_24h_explicit(self):
+        """24h time format when explicitly specified."""
+        sample_matches = [{
+            'id': 'm1',
+            'date': '2024-10-15T14:30:00Z',  # 2:30 PM
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }]
+
+        with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
+            response = client.get("/calendar.ics?mode=player&prep=60&tf=24h")
+
+            assert response.status_code == 200
+            assert '14:30' in response.text
+
+    def test_calendar_endpoint_time_format_12h(self):
+        """12h time format works correctly."""
+        sample_matches = [{
+            'id': 'm1',
+            'date': '2024-10-15T21:00:00Z',  # 9 PM
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }]
+
+        with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
+            response = client.get("/calendar.ics?mode=player&prep=60&tf=12h")
+
+            assert response.status_code == 200
+            assert '9:00 PM' in response.text
+
+    def test_calendar_endpoint_time_format_invalid_defaults_to_24h(self):
+        """Invalid time format defaults to 24h."""
+        sample_matches = [{
+            'id': 'm1',
+            'date': '2024-10-15T21:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }]
+
+        with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
+            response = client.get("/calendar.ics?mode=player&prep=60&tf=invalid")
+
+            assert response.status_code == 200
+            # Should use 24h format as fallback
+            assert '21:00' in response.text
+
+    def test_calendar_endpoint_time_format_fan_mode_ignored(self):
+        """Time format in fan mode doesn't affect output."""
+        sample_matches = [{
+            'id': 'm1',
+            'date': '2024-10-15T21:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }]
+
+        with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
+            response = client.get("/calendar.ics?tf=12h")
+
+            assert response.status_code == 200
+            # Fan mode should NOT have time prefix
+            assert 'SUMMARY:A vs B' in response.text
+            assert '9:00 PM' not in response.text
+
+
 class TestCacheInfoEndpoint:
     """Tests for cache info endpoint."""
 
