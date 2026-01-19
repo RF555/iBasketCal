@@ -232,7 +232,8 @@ async def get_calendar(
     team: Optional[str] = Query(None, description="Team name filter"),
     mode: Optional[str] = Query("fan", description="Calendar mode: 'fan' or 'player'"),
     prep: Optional[int] = Query(60, ge=15, le=180, description="Prep time in minutes for player mode (15-180)"),
-    tf: Optional[str] = Query("24h", description="Time format in event title: '24h' or '12h'")
+    tf: Optional[str] = Query("24h", description="Time format in event title: '24h' or '12h'"),
+    tz: Optional[str] = Query("Asia/Jerusalem", description="Timezone for displayed times in player mode (IANA format)")
 ):
     """
     Generate ICS calendar feed with all season games.
@@ -244,11 +245,12 @@ async def get_calendar(
         mode: 'fan' (default) - events at game time, 'player' - events include prep time
         prep: Prep time in minutes for player mode (15-180, default 60)
         tf: Time format for event title: '24h' (default) or '12h' (AM/PM)
+        tz: Timezone for displayed times in player mode (IANA format, default 'Asia/Jerusalem')
 
     Example URLs:
     - /calendar.ics - All games for the season (fan mode)
     - /calendar.ics?mode=player&prep=60 - Player mode with 60 min prep time
-    - /calendar.ics?mode=player&prep=90&tf=12h - Player mode with 12h time format
+    - /calendar.ics?mode=player&prep=90&tf=12h&tz=America/New_York - Player mode with 12h time format in NY timezone
     """
     try:
         # Validate mode
@@ -282,7 +284,8 @@ async def get_calendar(
             calendar_name,
             player_mode=(mode == 'player'),
             prep_time_minutes=prep if mode == 'player' else 0,
-            time_format=tf
+            time_format=tf,
+            display_timezone=tz if mode == 'player' else "Asia/Jerusalem"
         )
 
         return Response(
