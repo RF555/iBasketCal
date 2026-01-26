@@ -42,6 +42,7 @@ def get_database() -> DatabaseInterface:
         return _db_instance
 
     db_type = os.environ.get('DB_TYPE', 'sqlite').lower()
+    print(f"[*] Database type: {db_type}")
 
     if db_type == 'sqlite':
         from .sqlite_db import SQLiteDatabase

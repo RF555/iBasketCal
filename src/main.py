@@ -4,9 +4,14 @@ Israeli Basketball Calendar - FastAPI Application
 Provides REST API and ICS calendar endpoints for Israeli basketball games.
 """
 
+# Load environment variables from .env file BEFORE any other imports
+from dotenv import load_dotenv
+load_dotenv()
+
 from contextlib import asynccontextmanager
 from datetime import datetime
-from fastapi import FastAPI, Query, Response, HTTPException
+from fastapi import FastAPI, Query, Response, HTTPException, Request
+from urllib.parse import quote, urlencode
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -194,15 +199,24 @@ async def get_competitions(season_id: str):
 @app.get("/api/matches")
 async def get_matches(
     season: Optional[str] = Query(None, description="Season ID"),
-    competition: Optional[str] = Query(None, description="Competition name filter"),
-    team: Optional[str] = Query(None, description="Team name filter")
+    competition: Optional[str] = Query(None, description="Competition name filter (deprecated, use group_id)"),
+    team: Optional[str] = Query(None, description="Team name filter (deprecated, use team_id)"),
+    group_id: Optional[str] = Query(None, description="Competition group ID (exact match, preferred)"),
+    team_id: Optional[str] = Query(None, description="Team ID filter (exact match, preferred)")
 ):
-    """Get matches with optional filters."""
+    """
+    Get matches with optional filters.
+
+    ID-based filters (group_id, team_id) are preferred over name-based filters.
+    If both team_id and team are provided, team_id takes precedence.
+    """
     try:
         matches = data_service.get_all_matches(
             season_id=season,
             competition_name=competition,
-            team_name=team
+            team_name=team,
+            group_id=group_id,
+            team_id=team_id
         )
         return matches
     except Exception as e:
@@ -212,11 +226,25 @@ async def get_matches(
 @app.get("/api/teams")
 async def get_teams(
     season: Optional[str] = Query(None, description="Season ID"),
+    group_id: Optional[str] = Query(None, description="Competition group ID (preferred for dropdown population)"),
     q: Optional[str] = Query(None, description="Search query")
 ):
-    """Get teams with optional search."""
+    """
+    Get teams with optional filters.
+
+    For populating team dropdowns after selecting a league, use group_id
+    instead of fetching all matches. This is much more efficient.
+
+    Priority:
+    1. If group_id is provided, return teams for that group only
+    2. If q (search) is provided, search teams by name
+    3. Otherwise, return all teams (optionally filtered by season)
+    """
     try:
-        if q:
+        if group_id:
+            # Preferred: get teams by competition group (efficient)
+            teams = data_service.get_teams_by_group(group_id)
+        elif q:
             teams = data_service.search_teams(q, season_id=season)
         else:
             teams = data_service.get_teams(season_id=season)
@@ -225,11 +253,82 @@ async def get_teams(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/calendar-url")
+async def get_calendar_url(
+    request: Request,
+    season: Optional[str] = Query(None, description="Season ID"),
+    group_id: Optional[str] = Query(None, description="Competition group ID"),
+    team_id: Optional[str] = Query(None, description="Team ID"),
+    mode: Optional[str] = Query("fan", description="Calendar mode: 'fan' or 'player'"),
+    prep: Optional[int] = Query(60, ge=15, le=180, description="Prep time in minutes for player mode"),
+    tf: Optional[str] = Query("24h", description="Time format: '24h' or '12h'"),
+    tz: Optional[str] = Query("Asia/Jerusalem", description="Timezone for player mode (IANA format)")
+):
+    """
+    Generate subscription URLs for all calendar platforms.
+
+    Returns URLs for:
+    - ics_url: Direct ICS file URL (https)
+    - webcal_url: webcal:// protocol URL for calendar apps
+    - google_url: Google Calendar subscription URL
+    - outlook365_url: Outlook 365 (work/school) subscription URL
+    - outlook_url: Outlook.com (personal) subscription URL
+
+    Example:
+        GET /api/calendar-url?season=123&group_id=456&team_id=789
+        GET /api/calendar-url?season=123&group_id=456&mode=player&prep=60
+    """
+    try:
+        # Build query parameters for calendar.ics
+        params = {}
+        if season:
+            params['season'] = season
+        if group_id:
+            params['group_id'] = group_id
+        if team_id:
+            params['team_id'] = team_id
+
+        # Add player mode parameters if applicable
+        if mode == 'player':
+            params['mode'] = 'player'
+            params['prep'] = str(prep)
+            params['tf'] = tf
+            params['tz'] = tz
+
+        # Build query string
+        query_string = urlencode(params) if params else ''
+        ics_path = f"/calendar.ics?{query_string}" if query_string else "/calendar.ics"
+
+        # Get base URL from request
+        # Use X-Forwarded headers if behind a proxy, otherwise use request URL
+        forwarded_proto = request.headers.get('x-forwarded-proto', request.url.scheme)
+        forwarded_host = request.headers.get('x-forwarded-host', request.url.netloc)
+
+        base_url = f"{forwarded_proto}://{forwarded_host}"
+        host = forwarded_host
+
+        # Build all platform URLs
+        full_ics_url = f"{base_url}{ics_path}"
+        webcal_url = f"webcal://{host}{ics_path}"
+
+        return {
+            "ics_url": full_ics_url,
+            "webcal_url": webcal_url,
+            "google_url": f"https://calendar.google.com/calendar/r?cid={quote(webcal_url, safe='')}",
+            "outlook365_url": f"https://outlook.office.com/calendar/0/addfromweb?url={quote(full_ics_url, safe='')}",
+            "outlook_url": f"https://outlook.live.com/calendar/0/addfromweb?url={quote(full_ics_url, safe='')}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/calendar.ics")
 async def get_calendar(
     season: Optional[str] = Query(None, description="Season ID"),
-    competition: Optional[str] = Query(None, description="Competition name filter"),
-    team: Optional[str] = Query(None, description="Team name filter"),
+    competition: Optional[str] = Query(None, description="Competition name filter (deprecated, use group_id)"),
+    team: Optional[str] = Query(None, description="Team name filter (deprecated, use team_id)"),
+    group_id: Optional[str] = Query(None, description="Competition group ID (exact match, preferred)"),
+    team_id: Optional[str] = Query(None, description="Team ID filter (exact match, preferred)"),
     mode: Optional[str] = Query("fan", description="Calendar mode: 'fan' or 'player'"),
     prep: Optional[int] = Query(60, ge=15, le=180, description="Prep time in minutes for player mode (15-180)"),
     tf: Optional[str] = Query("24h", description="Time format in event title: '24h' or '12h'"),
@@ -240,8 +339,10 @@ async def get_calendar(
 
     Args:
         season: Filter by season ID
-        competition: Filter by competition name
-        team: Filter by team name
+        competition: Filter by competition name (deprecated, use group_id)
+        team: Filter by team name (deprecated, use team_id)
+        group_id: Competition group ID (exact match, preferred)
+        team_id: Team ID filter (exact match, preferred over team)
         mode: 'fan' (default) - events at game time, 'player' - events include prep time
         prep: Prep time in minutes for player mode (15-180, default 60)
         tf: Time format for event title: '24h' (default) or '12h' (AM/PM)
@@ -249,6 +350,7 @@ async def get_calendar(
 
     Example URLs:
     - /calendar.ics - All games for the season (fan mode)
+    - /calendar.ics?season=123&group_id=grp456&team_id=team789 - ID-based filtering (preferred)
     - /calendar.ics?mode=player&prep=60 - Player mode with 60 min prep time
     - /calendar.ics?mode=player&prep=90&tf=12h&tz=America/New_York - Player mode with 12h time format in NY timezone
     """
@@ -261,11 +363,13 @@ async def get_calendar(
         if tf not in ('24h', '12h'):
             tf = '24h'
 
-        # Get matches with filters
+        # Get matches with filters (ID params take precedence)
         matches = data_service.get_all_matches(
             season_id=season,
             competition_name=competition,
-            team_name=team
+            team_name=team,
+            group_id=group_id,
+            team_id=team_id
         )
 
         # Generate calendar name

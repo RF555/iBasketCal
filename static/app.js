@@ -27,7 +27,9 @@ let state = {
     prepMinutes: 0,    // 0, 15, 30, 45
     prepTime: 60,      // total minutes (calculated)
     timeFormat: '24h', // '24h' or '12h'
-    timezone: 'Asia/Jerusalem'  // IANA timezone
+    timezone: 'Asia/Jerusalem',  // IANA timezone
+    // Backend-generated calendar URLs
+    calendarUrls: null  // { ics_url, webcal_url, google_url, outlook365_url, outlook_url }
 };
 
 // Store last cache info for re-render on language change
@@ -88,7 +90,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Listen for language changes to update dynamic content
-window.addEventListener('languageChanged', () => {
+window.addEventListener('languageChanged', async () => {
     // Re-render dynamic content with new language
     populateSeasons();
 
@@ -115,7 +117,7 @@ window.addEventListener('languageChanged', () => {
     }
 
     // Update calendar URL to refresh calendar name translation
-    updateCalendarUrl();
+    await updateCalendarUrl();
 });
 
 
@@ -131,7 +133,7 @@ async function loadInitialData() {
         lastCacheInfo = cacheInfo;
         populateSeasons();
         updateCacheStatus(cacheInfo);
-        updateCalendarUrl();
+        await updateCalendarUrl();
 
         // Show empty state
         elements.matchesPreview.innerHTML = `<p class="loading">${t('preview.selectFilters')}</p>`;
@@ -246,30 +248,17 @@ async function populateLeagues(seasonId) {
 }
 
 // Populate teams dropdown based on selected league
-async function populateTeams(groupId, competitionName) {
+// Uses the efficient /api/teams?group_id endpoint instead of fetching all matches
+async function populateTeams(groupId) {
     elements.teamSelect.innerHTML = `<option value="">${t('filters.team.loading')}</option>`;
     elements.teamSelect.disabled = true;
 
     try {
-        // Get matches for this group to extract teams
+        // Use the new efficient endpoint - only fetches teams for this group
         if (!state.teams[groupId]) {
-            const matches = await fetchAPI(`/api/matches?competition=${encodeURIComponent(competitionName)}&season=${state.filters.season}`);
-
-            // Extract unique teams from matches
-            const teamsMap = {};
-            matches.forEach(match => {
-                if (match.homeTeam?.id) {
-                    teamsMap[match.homeTeam.id] = match.homeTeam.name;
-                }
-                if (match.awayTeam?.id) {
-                    teamsMap[match.awayTeam.id] = match.awayTeam.name;
-                }
-            });
-
-            // Convert to sorted array
-            state.teams[groupId] = Object.entries(teamsMap)
-                .map(([id, name]) => ({ id, name }))
-                .sort((a, b) => a.name.localeCompare(b.name, 'he'));
+            const teams = await fetchAPI(`/api/teams?group_id=${encodeURIComponent(groupId)}`);
+            // Teams are already sorted by name from the API
+            state.teams[groupId] = teams || [];
         }
 
         const teams = state.teams[groupId];
@@ -370,7 +359,7 @@ async function onSeasonChange() {
     }
 
     updateStepStates();
-    updateCalendarUrl();
+    await updateCalendarUrl();
     loadMatches();
 }
 
@@ -388,17 +377,18 @@ async function onLeagueChange() {
     elements.teamSelect.innerHTML = `<option value="">${t('filters.team.selectFirst')}</option>`;
     elements.teamSelect.disabled = true;
 
-    if (groupId && state.filters.leagueName) {
-        await populateTeams(groupId, state.filters.leagueName);
+    if (groupId) {
+        // Only needs groupId now - uses efficient /api/teams?group_id endpoint
+        await populateTeams(groupId);
     }
 
     updateStepStates();
-    updateCalendarUrl();
+    await updateCalendarUrl();
     loadMatches();
 }
 
 // Team change handler
-function onTeamChange() {
+async function onTeamChange() {
     const teamId = elements.teamSelect.value;
     const teamOption = elements.teamSelect.selectedOptions[0];
 
@@ -406,19 +396,19 @@ function onTeamChange() {
     state.filters.teamName = teamOption?.dataset.teamName || '';
 
     updateStepStates();
-    updateCalendarUrl();
+    await updateCalendarUrl();
     loadMatches();
 }
 
 // Mode change handler
-function onModeChange(event) {
+async function onModeChange(event) {
     state.mode = event.target.checked ? 'player' : 'fan';
 
     // Show/hide prep time dropdown based on mode
     elements.prepTimeContainer.style.display = state.mode === 'player' ? 'block' : 'none';
 
     updateStepStates();
-    updateCalendarUrl();
+    await updateCalendarUrl();
 
     // Re-render matches to show/hide game time prefix
     if (state.matches.length > 0) {
@@ -427,7 +417,7 @@ function onModeChange(event) {
 }
 
 // Prep time change handler
-function onPrepTimeChange() {
+async function onPrepTimeChange() {
     state.prepHours = parseInt(elements.prepHoursSelect.value, 10);
     state.prepMinutes = parseInt(elements.prepMinutesSelect.value, 10);
 
@@ -441,7 +431,7 @@ function onPrepTimeChange() {
         state.prepTime = 15;
     }
 
-    updateCalendarUrl();
+    await updateCalendarUrl();
 
     // Re-render preview to show updated event start times
     if (state.matches.length > 0) {
@@ -450,9 +440,9 @@ function onPrepTimeChange() {
 }
 
 // Time format change handler
-function onTimeFormatChange(event) {
+async function onTimeFormatChange(event) {
     state.timeFormat = event.target.value;
-    updateCalendarUrl();
+    await updateCalendarUrl();
 
     // Re-render matches to show updated time format
     if (state.matches.length > 0) {
@@ -461,9 +451,9 @@ function onTimeFormatChange(event) {
 }
 
 // Timezone change handler
-function onTimezoneChange(event) {
+async function onTimezoneChange(event) {
     state.timezone = event.target.value;
-    updateCalendarUrl();
+    await updateCalendarUrl();
 
     // Re-render matches to show updated timezone
     if (state.matches.length > 0) {
@@ -521,6 +511,7 @@ function updateStepStates() {
 }
 
 // Load matches based on current filters
+// Uses ID-based filtering (group_id, team_id) for better performance and stability
 async function loadMatches() {
     // Require at least season and league selection
     if (!state.filters.season || !state.filters.league) {
@@ -534,11 +525,10 @@ async function loadMatches() {
     try {
         const params = new URLSearchParams();
         params.set('season', state.filters.season);
-        if (state.filters.leagueName) {
-            params.set('competition', state.filters.leagueName);
-        }
-        if (state.filters.teamName) {
-            params.set('team', state.filters.teamName);
+        // Use ID-based filtering (preferred over name-based)
+        params.set('group_id', state.filters.league);
+        if (state.filters.team) {
+            params.set('team_id', state.filters.team);
         }
 
         const matches = await fetchAPI(`/api/matches?${params.toString()}`);
@@ -662,55 +652,52 @@ function formatDate(dateStr) {
     });
 }
 
-// Update calendar URL
-function updateCalendarUrl() {
+// Fetch calendar URLs from backend
+// Backend handles URL construction and encoding for all platforms
+async function fetchCalendarUrls() {
     const params = new URLSearchParams();
 
     if (state.filters.season) params.set('season', state.filters.season);
-    if (state.filters.leagueName) params.set('competition', state.filters.leagueName);
-    if (state.filters.teamName) params.set('team', state.filters.teamName);
+    if (state.filters.league) params.set('group_id', state.filters.league);
+    if (state.filters.team) params.set('team_id', state.filters.team);
 
-    // Add mode, prep time, time format, and timezone parameters for player mode
+    // Add player mode parameters
     if (state.mode === 'player') {
         params.set('mode', 'player');
         params.set('prep', state.prepTime.toString());
-        params.set('tf', state.timeFormat);  // '24h' or '12h'
-        params.set('tz', state.timezone);    // IANA timezone
+        params.set('tf', state.timeFormat);
+        params.set('tz', state.timezone);
     }
 
-    const baseUrl = window.location.origin;
-    const calendarPath = '/calendar.ics';
-    const queryString = params.toString();
+    try {
+        return await fetchAPI(`/api/calendar-url?${params.toString()}`);
+    } catch (error) {
+        console.error('Error fetching calendar URLs:', error);
+        return null;
+    }
+}
 
-    const fullUrl = queryString ? `${baseUrl}${calendarPath}?${queryString}` : `${baseUrl}${calendarPath}`;
+// Update calendar URL
+// Uses backend-generated URLs for all platforms
+async function updateCalendarUrl() {
+    // Fetch URLs from backend
+    const urls = await fetchCalendarUrls();
 
-    elements.calendarUrl.value = fullUrl;
-    elements.downloadLink.href = `${calendarPath}?${queryString}`;
+    if (urls) {
+        state.calendarUrls = urls;
 
-    // webcal:// protocol URL (used by multiple calendar apps)
-    const webcalUrl = fullUrl.replace(/^https?:\/\//, 'webcal://');
-
-    // Google Calendar subscribe URL
-    const googleUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcalUrl)}`;
-    elements.googleLink.href = googleUrl;
-
-    // Apple Calendar - direct webcal:// link
-    elements.appleLink.href = webcalUrl;
-
-    // Build calendar name for Outlook
-    const calendarNameParts = [t('header.title')];
-    if (state.filters.leagueName) calendarNameParts.push(state.filters.leagueName);
-    if (state.filters.teamName) calendarNameParts.push(state.filters.teamName);
-    if (state.mode === 'player') calendarNameParts.push(t('mode.player.label'));
-    const calendarName = calendarNameParts.join(' - ');
-
-    // Outlook 365 (work/school)
-    const outlook365Url = `https://outlook.office.com/calendar/0/addfromweb?url=${encodeURIComponent(webcalUrl)}&name=${encodeURIComponent(calendarName)}`;
-    elements.outlook365Link.href = outlook365Url;
-
-    // Outlook.com (personal)
-    const outlookComUrl = `https://outlook.live.com/calendar/0/addfromweb?url=${encodeURIComponent(webcalUrl)}&name=${encodeURIComponent(calendarName)}`;
-    elements.outlookComLink.href = outlookComUrl;
+        // Update UI with backend-generated URLs
+        elements.calendarUrl.value = urls.ics_url;
+        elements.downloadLink.href = urls.ics_url.replace(window.location.origin, '');
+        elements.googleLink.href = urls.google_url;
+        elements.appleLink.href = urls.webcal_url;
+        elements.outlook365Link.href = urls.outlook365_url;
+        elements.outlookComLink.href = urls.outlook_url;
+    } else {
+        // Fallback: clear URLs if backend call fails
+        state.calendarUrls = null;
+        elements.calendarUrl.value = '';
+    }
 }
 
 // Copy calendar URL to clipboard

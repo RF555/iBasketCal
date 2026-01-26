@@ -100,11 +100,12 @@ The preview shows all matches for the season with dates, scores, and venue addre
 |----------|-------------|
 | `GET /` | Web interface |
 | `GET /calendar.ics` | ICS calendar feed |
+| `GET /api/calendar-url` | Generate subscription URLs for all calendar platforms |
 | `GET /api/seasons` | List all seasons |
 | `GET /api/competitions` | List all competitions |
 | `GET /api/competitions/{season_id}` | Competitions for a season |
-| `GET /api/matches` | List matches with filters |
-| `GET /api/teams` | List all teams |
+| `GET /api/matches` | List matches with filters (`group_id`, `team_id` preferred) |
+| `GET /api/teams` | List teams (use `group_id` for efficient dropdown population) |
 | `GET /api/cache-info` | Cache status (includes database size, scraping state) |
 | `POST /api/refresh` | Force data refresh (rate limited: 5 min cooldown) |
 | `GET /api/refresh-status` | Check refresh progress and errors |
@@ -116,10 +117,12 @@ The preview shows all matches for the season with dates, scores, and venue addre
 | Parameter | Description | Example |
 |-----------|-------------|---------|
 | `season` | Filter by season ID | `?season=686e1422dd2c672160d5ca4b` |
-| `competition` | Filter by competition name (partial match) | `?competition=Premier` |
-| `team` | Filter by team name (partial match) | `?team=Maccabi` |
+| `group_id` | Competition group ID - the league/division (preferred) | `?group_id=grp123` |
+| `team_id` | Team ID - filter to a specific team's games (preferred) | `?team_id=team456` |
+| `competition` | Competition name filter (deprecated, use `group_id`) | `?competition=Premier` |
+| `team` | Team name filter (deprecated, use `team_id`) | `?team=Maccabi` |
 
-> **Note:** Competition and team names in the API are in Hebrew. Use partial matches (e.g., "Maccabi" matches teams containing that text) or copy the exact Hebrew names from the web interface.
+> **Note:** The web interface generates calendar URLs with IDs automatically. ID-based parameters are preferred for stable, efficient filtering. Name-based parameters are deprecated but still supported for backward compatibility.
 
 ### Example Calendar URLs
 
@@ -290,7 +293,7 @@ pytest tests/test_calendar_service.py
 ```
 
 **Test Suite Overview:**
-- **115 tests** covering all application layers
+- **172 tests** covering all application layers
 - **~4 seconds** execution time
 - **Coverage**: config (100%), calendar_service (89%), sqlite_db (87%), main (78%)
 
@@ -298,11 +301,11 @@ pytest tests/test_calendar_service.py
 |-----------|-------|----------|
 | `test_config.py` | 11 | Configuration helpers |
 | `test_rate_limiter.py` | 9 | Rate limiting logic |
-| `test_calendar_service.py` | 25 | ICS generation, escaping, RTL |
+| `test_calendar_service.py` | 49 | ICS generation, escaping, RTL |
 | `test_data_service.py` | 18 | Data access layer |
-| `test_main_api.py` | 28 | FastAPI endpoints |
+| `test_main_api.py` | 56 | FastAPI endpoints, calendar URL generation |
 | `test_integration.py` | 7 | End-to-end workflows |
-| `test_storage.py` | 17 | Database operations |
+| `test_storage.py` | 22 | Database operations, ID filtering |
 
 ### Code Formatting
 

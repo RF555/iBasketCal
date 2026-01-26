@@ -192,6 +192,7 @@ class DatabaseInterface(ABC):
         competition_name: Optional[str] = None,
         team_name: Optional[str] = None,
         group_id: Optional[str] = None,
+        team_id: Optional[str] = None,
         status: Optional[str] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
@@ -201,13 +202,15 @@ class DatabaseInterface(ABC):
         Get matches with flexible filtering.
 
         All filters are optional and combined with AND logic.
-        String filters (competition_name, team_name) use partial matching.
+        ID-based filters (team_id) use exact matching and take precedence.
+        String filters (competition_name, team_name) use partial matching (deprecated).
 
         Args:
             season_id: Exact match on season
-            competition_name: Partial match on competition name
-            team_name: Partial match on either home or away team name
+            competition_name: Partial match on competition name (deprecated, use group_id)
+            team_name: Partial match on either home or away team name (deprecated, use team_id)
             group_id: Exact match on competition group
+            team_id: Exact match on either home_team_id or away_team_id (preferred)
             status: Exact match on status (NOT_STARTED, LIVE, CLOSED)
             date_from: Matches on or after this ISO date
             date_to: Matches on or before this ISO date
@@ -215,6 +218,9 @@ class DatabaseInterface(ABC):
 
         Returns:
             List of match dictionaries, ordered by date ascending
+
+        Note:
+            If both team_id and team_name are provided, team_id takes precedence.
         """
         pass
 
@@ -229,6 +235,27 @@ class DatabaseInterface(ABC):
         Returns:
             List of team dictionaries with 'id', 'name', 'logo'
             Ordered by name
+        """
+        pass
+
+    @abstractmethod
+    def get_teams_by_group(self, group_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all teams that have played in a specific competition group.
+
+        This is the preferred method for populating team dropdowns in the UI,
+        as it returns only teams relevant to the selected competition group.
+
+        Args:
+            group_id: The competition group ID to filter by
+
+        Returns:
+            List of team dictionaries with 'id', 'name', 'logo'
+            Ordered by name
+
+        Note:
+            This method uses an efficient DISTINCT query on the matches table
+            to find all unique teams (home or away) for the given group.
         """
         pass
 

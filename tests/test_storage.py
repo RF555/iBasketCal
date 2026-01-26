@@ -219,6 +219,111 @@ class TestSQLiteDatabase:
         matches = db.get_matches(limit=1)
         assert len(matches) == 1
 
+    def test_get_matches_with_team_id_filter(self):
+        """Can filter matches by team_id (exact ID match)."""
+        db = get_database()
+
+        calendar_data = {
+            'rounds': [
+                {
+                    'matches': [
+                        {
+                            'id': 'match1',
+                            'date': '2024-01-15T18:00:00Z',
+                            'status': 'NOT_STARTED',
+                            'homeTeam': {'id': 'team1', 'name': 'Team A'},
+                            'awayTeam': {'id': 'team2', 'name': 'Team B'},
+                            'court': {}
+                        },
+                        {
+                            'id': 'match2',
+                            'date': '2024-01-16T18:00:00Z',
+                            'status': 'NOT_STARTED',
+                            'homeTeam': {'id': 'team2', 'name': 'Team B'},
+                            'awayTeam': {'id': 'team3', 'name': 'Team C'},
+                            'court': {}
+                        },
+                        {
+                            'id': 'match3',
+                            'date': '2024-01-17T18:00:00Z',
+                            'status': 'NOT_STARTED',
+                            'homeTeam': {'id': 'team3', 'name': 'Team C'},
+                            'awayTeam': {'id': 'team4', 'name': 'Team D'},
+                            'court': {}
+                        }
+                    ]
+                }
+            ]
+        }
+
+        db.save_matches(
+            group_id='group1',
+            calendar_data=calendar_data,
+            competition_name='League',
+            group_name='Division A',
+            season_id='season1'
+        )
+
+        # Filter by team_id for home team
+        matches = db.get_matches(team_id='team1')
+        assert len(matches) == 1
+        assert matches[0]['id'] == 'match1'
+
+        # Filter by team_id for team that plays both home and away
+        matches = db.get_matches(team_id='team2')
+        assert len(matches) == 2
+        match_ids = [m['id'] for m in matches]
+        assert 'match1' in match_ids
+        assert 'match2' in match_ids
+
+        # Filter by team_id for away team only
+        matches = db.get_matches(team_id='team4')
+        assert len(matches) == 1
+        assert matches[0]['id'] == 'match3'
+
+    def test_team_id_takes_precedence_over_team_name(self):
+        """team_id filter takes precedence over team_name when both provided."""
+        db = get_database()
+
+        calendar_data = {
+            'rounds': [
+                {
+                    'matches': [
+                        {
+                            'id': 'match1',
+                            'date': '2024-01-15T18:00:00Z',
+                            'status': 'NOT_STARTED',
+                            'homeTeam': {'id': 'team1', 'name': 'Maccabi'},
+                            'awayTeam': {'id': 'team2', 'name': 'Hapoel'},
+                            'court': {}
+                        },
+                        {
+                            'id': 'match2',
+                            'date': '2024-01-16T18:00:00Z',
+                            'status': 'NOT_STARTED',
+                            'homeTeam': {'id': 'team3', 'name': 'Other Team'},
+                            'awayTeam': {'id': 'team4', 'name': 'Another Team'},
+                            'court': {}
+                        }
+                    ]
+                }
+            ]
+        }
+
+        db.save_matches(
+            group_id='group1',
+            calendar_data=calendar_data,
+            competition_name='League',
+            group_name='Division A',
+            season_id='season1'
+        )
+
+        # When both team_id and team_name provided, team_id should take precedence
+        # team_id='team3' should find match2, even though team_name='Maccabi' would find match1
+        matches = db.get_matches(team_id='team3', team_name='Maccabi')
+        assert len(matches) == 1
+        assert matches[0]['id'] == 'match2'
+
     def test_get_teams(self):
         """Can get teams from matches."""
         db = get_database()
@@ -284,6 +389,83 @@ class TestSQLiteDatabase:
         assert len(teams) == 1
         assert teams[0]['name'] == 'Maccabi Tel Aviv'
 
+    def test_get_teams_by_group(self):
+        """Can get teams for a specific competition group."""
+        db = get_database()
+
+        # Create matches in two different groups
+        calendar_data_group1 = {
+            'rounds': [
+                {
+                    'matches': [
+                        {
+                            'id': 'match1',
+                            'date': '2024-01-15T18:00:00Z',
+                            'status': 'NOT_STARTED',
+                            'homeTeam': {'id': 'team1', 'name': 'Team A', 'logo': 'a.png'},
+                            'awayTeam': {'id': 'team2', 'name': 'Team B', 'logo': 'b.png'},
+                            'court': {}
+                        }
+                    ]
+                }
+            ]
+        }
+
+        calendar_data_group2 = {
+            'rounds': [
+                {
+                    'matches': [
+                        {
+                            'id': 'match2',
+                            'date': '2024-01-16T18:00:00Z',
+                            'status': 'NOT_STARTED',
+                            'homeTeam': {'id': 'team3', 'name': 'Team C', 'logo': 'c.png'},
+                            'awayTeam': {'id': 'team4', 'name': 'Team D', 'logo': 'd.png'},
+                            'court': {}
+                        }
+                    ]
+                }
+            ]
+        }
+
+        db.save_matches(
+            group_id='group1',
+            calendar_data=calendar_data_group1,
+            competition_name='League 1',
+            group_name='Division A',
+            season_id='season1'
+        )
+
+        db.save_matches(
+            group_id='group2',
+            calendar_data=calendar_data_group2,
+            competition_name='League 2',
+            group_name='Division B',
+            season_id='season1'
+        )
+
+        # Get teams for group1 only
+        teams = db.get_teams_by_group('group1')
+        assert len(teams) == 2
+        team_names = [t['name'] for t in teams]
+        assert 'Team A' in team_names
+        assert 'Team B' in team_names
+        assert 'Team C' not in team_names
+        assert 'Team D' not in team_names
+
+        # Get teams for group2 only
+        teams = db.get_teams_by_group('group2')
+        assert len(teams) == 2
+        team_names = [t['name'] for t in teams]
+        assert 'Team C' in team_names
+        assert 'Team D' in team_names
+
+    def test_get_teams_by_group_empty(self):
+        """get_teams_by_group returns empty list for nonexistent group."""
+        db = get_database()
+        teams = db.get_teams_by_group('nonexistent_group')
+        assert teams == []
+
     def test_cache_info(self):
         """Can get cache info."""
         db = get_database()
@@ -343,7 +525,7 @@ class TestDatabaseInterface:
             'save_seasons', 'save_competitions', 'save_matches',
             'save_standings', 'update_scrape_timestamp',
             'get_seasons', 'get_competitions', 'get_all_competitions',
-            'get_matches', 'get_teams', 'search_teams', 'get_standings',
+            'get_matches', 'get_teams', 'get_teams_by_group', 'search_teams', 'get_standings',
             'get_cache_info', 'get_database_size',
             'clear_all', 'vacuum'
         ]
