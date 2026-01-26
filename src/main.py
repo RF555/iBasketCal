@@ -194,15 +194,24 @@ async def get_competitions(season_id: str):
 @app.get("/api/matches")
 async def get_matches(
     season: Optional[str] = Query(None, description="Season ID"),
-    competition: Optional[str] = Query(None, description="Competition name filter"),
-    team: Optional[str] = Query(None, description="Team name filter")
+    competition: Optional[str] = Query(None, description="Competition name filter (deprecated, use group_id)"),
+    team: Optional[str] = Query(None, description="Team name filter (deprecated, use team_id)"),
+    group_id: Optional[str] = Query(None, description="Competition group ID (exact match, preferred)"),
+    team_id: Optional[str] = Query(None, description="Team ID filter (exact match, preferred)")
 ):
-    """Get matches with optional filters."""
+    """
+    Get matches with optional filters.
+
+    ID-based filters (group_id, team_id) are preferred over name-based filters.
+    If both team_id and team are provided, team_id takes precedence.
+    """
     try:
         matches = data_service.get_all_matches(
             season_id=season,
             competition_name=competition,
-            team_name=team
+            team_name=team,
+            group_id=group_id,
+            team_id=team_id
         )
         return matches
     except Exception as e:
@@ -212,11 +221,25 @@ async def get_matches(
 @app.get("/api/teams")
 async def get_teams(
     season: Optional[str] = Query(None, description="Season ID"),
+    group_id: Optional[str] = Query(None, description="Competition group ID (preferred for dropdown population)"),
     q: Optional[str] = Query(None, description="Search query")
 ):
-    """Get teams with optional search."""
+    """
+    Get teams with optional filters.
+
+    For populating team dropdowns after selecting a league, use group_id
+    instead of fetching all matches. This is much more efficient.
+
+    Priority:
+    1. If group_id is provided, return teams for that group only
+    2. If q (search) is provided, search teams by name
+    3. Otherwise, return all teams (optionally filtered by season)
+    """
     try:
-        if q:
+        if group_id:
+            # Preferred: get teams by competition group (efficient)
+            teams = data_service.get_teams_by_group(group_id)
+        elif q:
             teams = data_service.search_teams(q, season_id=season)
         else:
             teams = data_service.get_teams(season_id=season)
@@ -228,8 +251,10 @@ async def get_teams(
 @app.get("/calendar.ics")
 async def get_calendar(
     season: Optional[str] = Query(None, description="Season ID"),
-    competition: Optional[str] = Query(None, description="Competition name filter"),
-    team: Optional[str] = Query(None, description="Team name filter"),
+    competition: Optional[str] = Query(None, description="Competition name filter (deprecated, use group_id)"),
+    team: Optional[str] = Query(None, description="Team name filter (deprecated, use team_id)"),
+    group_id: Optional[str] = Query(None, description="Competition group ID (exact match, preferred)"),
+    team_id: Optional[str] = Query(None, description="Team ID filter (exact match, preferred)"),
     mode: Optional[str] = Query("fan", description="Calendar mode: 'fan' or 'player'"),
     prep: Optional[int] = Query(60, ge=15, le=180, description="Prep time in minutes for player mode (15-180)"),
     tf: Optional[str] = Query("24h", description="Time format in event title: '24h' or '12h'"),
@@ -240,8 +265,10 @@ async def get_calendar(
 
     Args:
         season: Filter by season ID
-        competition: Filter by competition name
-        team: Filter by team name
+        competition: Filter by competition name (deprecated, use group_id)
+        team: Filter by team name (deprecated, use team_id)
+        group_id: Competition group ID (exact match, preferred)
+        team_id: Team ID filter (exact match, preferred over team)
         mode: 'fan' (default) - events at game time, 'player' - events include prep time
         prep: Prep time in minutes for player mode (15-180, default 60)
         tf: Time format for event title: '24h' (default) or '12h' (AM/PM)
@@ -249,6 +276,7 @@ async def get_calendar(
 
     Example URLs:
     - /calendar.ics - All games for the season (fan mode)
+    - /calendar.ics?season=123&group_id=grp456&team_id=team789 - ID-based filtering (preferred)
     - /calendar.ics?mode=player&prep=60 - Player mode with 60 min prep time
     - /calendar.ics?mode=player&prep=90&tf=12h&tz=America/New_York - Player mode with 12h time format in NY timezone
     """
@@ -261,11 +289,13 @@ async def get_calendar(
         if tf not in ('24h', '12h'):
             tf = '24h'
 
-        # Get matches with filters
+        # Get matches with filters (ID params take precedence)
         matches = data_service.get_all_matches(
             season_id=season,
             competition_name=competition,
-            team_name=team
+            team_name=team,
+            group_id=group_id,
+            team_id=team_id
         )
 
         # Generate calendar name
