@@ -134,11 +134,13 @@ class TestMatchesEndpoint:
             data_service.get_all_matches.assert_called_once_with(
                 season_id='season_2024_2025',
                 competition_name=None,
-                team_name=None
+                team_name=None,
+                group_id=None,
+                team_id=None
             )
 
     def test_get_matches_endpoint_with_competition_filter(self):
-        """Filter by competition."""
+        """Filter by competition (deprecated, backward compatible)."""
         with patch.object(data_service, 'get_all_matches', return_value=[]):
             response = client.get("/api/matches?competition=Premier")
 
@@ -146,11 +148,13 @@ class TestMatchesEndpoint:
             data_service.get_all_matches.assert_called_once_with(
                 season_id=None,
                 competition_name='Premier',
-                team_name=None
+                team_name=None,
+                group_id=None,
+                team_id=None
             )
 
     def test_get_matches_endpoint_with_team_filter(self):
-        """Filter by team."""
+        """Filter by team name (deprecated, backward compatible)."""
         with patch.object(data_service, 'get_all_matches', return_value=[]):
             response = client.get("/api/matches?team=Maccabi")
 
@@ -158,7 +162,9 @@ class TestMatchesEndpoint:
             data_service.get_all_matches.assert_called_once_with(
                 season_id=None,
                 competition_name=None,
-                team_name='Maccabi'
+                team_name='Maccabi',
+                group_id=None,
+                team_id=None
             )
 
     def test_get_matches_endpoint_with_multiple_filters(self):
@@ -170,7 +176,51 @@ class TestMatchesEndpoint:
             data_service.get_all_matches.assert_called_once_with(
                 season_id='s1',
                 competition_name='Premier',
-                team_name='Maccabi'
+                team_name='Maccabi',
+                group_id=None,
+                team_id=None
+            )
+
+    def test_get_matches_endpoint_with_group_id(self):
+        """Filter by group_id (ID-based, preferred)."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            response = client.get("/api/matches?group_id=grp123")
+
+            assert response.status_code == 200
+            data_service.get_all_matches.assert_called_once_with(
+                season_id=None,
+                competition_name=None,
+                team_name=None,
+                group_id='grp123',
+                team_id=None
+            )
+
+    def test_get_matches_endpoint_with_team_id(self):
+        """Filter by team_id (ID-based, preferred)."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            response = client.get("/api/matches?team_id=team456")
+
+            assert response.status_code == 200
+            data_service.get_all_matches.assert_called_once_with(
+                season_id=None,
+                competition_name=None,
+                team_name=None,
+                group_id=None,
+                team_id='team456'
+            )
+
+    def test_get_matches_endpoint_with_id_filters(self):
+        """Filter using ID-based parameters (preferred over name-based)."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            response = client.get("/api/matches?season=s1&group_id=grp123&team_id=team456")
+
+            assert response.status_code == 200
+            data_service.get_all_matches.assert_called_once_with(
+                season_id='s1',
+                competition_name=None,
+                team_name=None,
+                group_id='grp123',
+                team_id='team456'
             )
 
 
@@ -205,6 +255,33 @@ class TestTeamsEndpoint:
             data = response.json()
             assert len(data) >= 1
             data_service.search_teams.assert_called_once()
+
+    def test_get_teams_endpoint_with_group_id(self):
+        """GET /api/teams?group_id=X uses get_teams_by_group (preferred)."""
+        mock_teams = [
+            {'id': 't1', 'name': 'Team A', 'logo': 'a.png'},
+            {'id': 't2', 'name': 'Team B', 'logo': 'b.png'}
+        ]
+
+        with patch.object(data_service, 'get_teams_by_group', return_value=mock_teams):
+            response = client.get("/api/teams?group_id=grp123")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data) == 2
+            data_service.get_teams_by_group.assert_called_once_with('grp123')
+
+    def test_get_teams_endpoint_group_id_takes_priority(self):
+        """group_id takes priority over q (search)."""
+        mock_teams = [{'id': 't1', 'name': 'Team A', 'logo': 'a.png'}]
+
+        with patch.object(data_service, 'get_teams_by_group', return_value=mock_teams):
+            # Even with q parameter, group_id should be used
+            response = client.get("/api/teams?group_id=grp123&q=Maccabi")
+
+            assert response.status_code == 200
+            # Should call get_teams_by_group, not search_teams
+            data_service.get_teams_by_group.assert_called_once_with('grp123')
 
 
 class TestCalendarEndpoint:
@@ -246,7 +323,7 @@ class TestCalendarEndpoint:
             assert 'text/calendar' in response.headers['content-type']
 
     def test_get_calendar_endpoint_with_filters(self):
-        """Calendar with filters."""
+        """Calendar with name-based filters (backward compatible)."""
         with patch.object(data_service, 'get_all_matches', return_value=[]):
             response = client.get("/calendar.ics?team=Maccabi&competition=Premier")
 
@@ -255,7 +332,23 @@ class TestCalendarEndpoint:
             data_service.get_all_matches.assert_called_once_with(
                 season_id=None,
                 competition_name='Premier',
-                team_name='Maccabi'
+                team_name='Maccabi',
+                group_id=None,
+                team_id=None
+            )
+
+    def test_get_calendar_endpoint_with_id_filters(self):
+        """Calendar with ID-based filters (preferred)."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            response = client.get("/calendar.ics?season=s1&group_id=grp123&team_id=team456")
+
+            assert response.status_code == 200
+            data_service.get_all_matches.assert_called_once_with(
+                season_id='s1',
+                competition_name=None,
+                team_name=None,
+                group_id='grp123',
+                team_id='team456'
             )
 
     def test_get_calendar_endpoint_cache_headers(self):

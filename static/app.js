@@ -246,30 +246,17 @@ async function populateLeagues(seasonId) {
 }
 
 // Populate teams dropdown based on selected league
-async function populateTeams(groupId, competitionName) {
+// Uses the efficient /api/teams?group_id endpoint instead of fetching all matches
+async function populateTeams(groupId) {
     elements.teamSelect.innerHTML = `<option value="">${t('filters.team.loading')}</option>`;
     elements.teamSelect.disabled = true;
 
     try {
-        // Get matches for this group to extract teams
+        // Use the new efficient endpoint - only fetches teams for this group
         if (!state.teams[groupId]) {
-            const matches = await fetchAPI(`/api/matches?competition=${encodeURIComponent(competitionName)}&season=${state.filters.season}`);
-
-            // Extract unique teams from matches
-            const teamsMap = {};
-            matches.forEach(match => {
-                if (match.homeTeam?.id) {
-                    teamsMap[match.homeTeam.id] = match.homeTeam.name;
-                }
-                if (match.awayTeam?.id) {
-                    teamsMap[match.awayTeam.id] = match.awayTeam.name;
-                }
-            });
-
-            // Convert to sorted array
-            state.teams[groupId] = Object.entries(teamsMap)
-                .map(([id, name]) => ({ id, name }))
-                .sort((a, b) => a.name.localeCompare(b.name, 'he'));
+            const teams = await fetchAPI(`/api/teams?group_id=${encodeURIComponent(groupId)}`);
+            // Teams are already sorted by name from the API
+            state.teams[groupId] = teams || [];
         }
 
         const teams = state.teams[groupId];
@@ -388,8 +375,9 @@ async function onLeagueChange() {
     elements.teamSelect.innerHTML = `<option value="">${t('filters.team.selectFirst')}</option>`;
     elements.teamSelect.disabled = true;
 
-    if (groupId && state.filters.leagueName) {
-        await populateTeams(groupId, state.filters.leagueName);
+    if (groupId) {
+        // Only needs groupId now - uses efficient /api/teams?group_id endpoint
+        await populateTeams(groupId);
     }
 
     updateStepStates();
@@ -521,6 +509,7 @@ function updateStepStates() {
 }
 
 // Load matches based on current filters
+// Uses ID-based filtering (group_id, team_id) for better performance and stability
 async function loadMatches() {
     // Require at least season and league selection
     if (!state.filters.season || !state.filters.league) {
@@ -534,11 +523,10 @@ async function loadMatches() {
     try {
         const params = new URLSearchParams();
         params.set('season', state.filters.season);
-        if (state.filters.leagueName) {
-            params.set('competition', state.filters.leagueName);
-        }
-        if (state.filters.teamName) {
-            params.set('team', state.filters.teamName);
+        // Use ID-based filtering (preferred over name-based)
+        params.set('group_id', state.filters.league);
+        if (state.filters.team) {
+            params.set('team_id', state.filters.team);
         }
 
         const matches = await fetchAPI(`/api/matches?${params.toString()}`);
@@ -663,12 +651,14 @@ function formatDate(dateStr) {
 }
 
 // Update calendar URL
+// Uses ID-based parameters (group_id, team_id) for stable, bookmark-friendly URLs
 function updateCalendarUrl() {
     const params = new URLSearchParams();
 
     if (state.filters.season) params.set('season', state.filters.season);
-    if (state.filters.leagueName) params.set('competition', state.filters.leagueName);
-    if (state.filters.teamName) params.set('team', state.filters.teamName);
+    // Use ID-based filtering for stable URLs (IDs don't change, names might)
+    if (state.filters.league) params.set('group_id', state.filters.league);
+    if (state.filters.team) params.set('team_id', state.filters.team);
 
     // Add mode, prep time, time format, and timezone parameters for player mode
     if (state.mode === 'player') {

@@ -4,6 +4,10 @@ Israeli Basketball Calendar - FastAPI Application
 Provides REST API and ICS calendar endpoints for Israeli basketball games.
 """
 
+# Load environment variables from .env file BEFORE any other imports
+from dotenv import load_dotenv
+load_dotenv()
+
 from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI, Query, Response, HTTPException
