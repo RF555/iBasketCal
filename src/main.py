@@ -10,7 +10,8 @@ load_dotenv()
 
 from contextlib import asynccontextmanager
 from datetime import datetime
-from fastapi import FastAPI, Query, Response, HTTPException
+from fastapi import FastAPI, Query, Response, HTTPException, Request
+from urllib.parse import quote, urlencode
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -248,6 +249,75 @@ async def get_teams(
         else:
             teams = data_service.get_teams(season_id=season)
         return teams
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/calendar-url")
+async def get_calendar_url(
+    request: Request,
+    season: Optional[str] = Query(None, description="Season ID"),
+    group_id: Optional[str] = Query(None, description="Competition group ID"),
+    team_id: Optional[str] = Query(None, description="Team ID"),
+    mode: Optional[str] = Query("fan", description="Calendar mode: 'fan' or 'player'"),
+    prep: Optional[int] = Query(60, ge=15, le=180, description="Prep time in minutes for player mode"),
+    tf: Optional[str] = Query("24h", description="Time format: '24h' or '12h'"),
+    tz: Optional[str] = Query("Asia/Jerusalem", description="Timezone for player mode (IANA format)")
+):
+    """
+    Generate subscription URLs for all calendar platforms.
+
+    Returns URLs for:
+    - ics_url: Direct ICS file URL (https)
+    - webcal_url: webcal:// protocol URL for calendar apps
+    - google_url: Google Calendar subscription URL
+    - outlook365_url: Outlook 365 (work/school) subscription URL
+    - outlook_url: Outlook.com (personal) subscription URL
+
+    Example:
+        GET /api/calendar-url?season=123&group_id=456&team_id=789
+        GET /api/calendar-url?season=123&group_id=456&mode=player&prep=60
+    """
+    try:
+        # Build query parameters for calendar.ics
+        params = {}
+        if season:
+            params['season'] = season
+        if group_id:
+            params['group_id'] = group_id
+        if team_id:
+            params['team_id'] = team_id
+
+        # Add player mode parameters if applicable
+        if mode == 'player':
+            params['mode'] = 'player'
+            params['prep'] = str(prep)
+            params['tf'] = tf
+            params['tz'] = tz
+
+        # Build query string
+        query_string = urlencode(params) if params else ''
+        ics_path = f"/calendar.ics?{query_string}" if query_string else "/calendar.ics"
+
+        # Get base URL from request
+        # Use X-Forwarded headers if behind a proxy, otherwise use request URL
+        forwarded_proto = request.headers.get('x-forwarded-proto', request.url.scheme)
+        forwarded_host = request.headers.get('x-forwarded-host', request.url.netloc)
+
+        base_url = f"{forwarded_proto}://{forwarded_host}"
+        host = forwarded_host
+
+        # Build all platform URLs
+        full_ics_url = f"{base_url}{ics_path}"
+        webcal_url = f"webcal://{host}{ics_path}"
+
+        return {
+            "ics_url": full_ics_url,
+            "webcal_url": webcal_url,
+            "google_url": f"https://calendar.google.com/calendar/r?cid={quote(webcal_url, safe='')}",
+            "outlook365_url": f"https://outlook.office.com/calendar/0/addfromweb?url={quote(full_ics_url, safe='')}",
+            "outlook_url": f"https://outlook.live.com/calendar/0/addfromweb?url={quote(full_ics_url, safe='')}"
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

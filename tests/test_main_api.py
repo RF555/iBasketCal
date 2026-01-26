@@ -284,6 +284,134 @@ class TestTeamsEndpoint:
             data_service.get_teams_by_group.assert_called_once_with('grp123')
 
 
+class TestCalendarUrlEndpoint:
+    """Tests for calendar URL generation endpoint."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_get_calendar_url_endpoint_basic(self):
+        """GET /api/calendar-url returns all URL fields."""
+        response = client.get("/api/calendar-url")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify all required fields are present
+        assert 'ics_url' in data
+        assert 'webcal_url' in data
+        assert 'google_url' in data
+        assert 'outlook365_url' in data
+        assert 'outlook_url' in data
+
+    def test_get_calendar_url_endpoint_with_filters(self):
+        """Calendar URL endpoint includes filter parameters."""
+        response = client.get("/api/calendar-url?season=s1&group_id=grp123&team_id=team456")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify parameters are included in URLs
+        assert 'season=s1' in data['ics_url']
+        assert 'group_id=grp123' in data['ics_url']
+        assert 'team_id=team456' in data['ics_url']
+
+    def test_get_calendar_url_endpoint_player_mode(self):
+        """Calendar URL endpoint includes player mode parameters."""
+        response = client.get("/api/calendar-url?mode=player&prep=90&tf=12h&tz=America/New_York")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify player mode parameters are included
+        assert 'mode=player' in data['ics_url']
+        assert 'prep=90' in data['ics_url']
+        assert 'tf=12h' in data['ics_url']
+        # URL-encoded timezone
+        assert 'tz=America' in data['ics_url']
+
+    def test_get_calendar_url_endpoint_fan_mode_no_extra_params(self):
+        """Fan mode (default) does not include player mode parameters."""
+        response = client.get("/api/calendar-url?season=s1")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Should not include player mode params
+        assert 'mode=' not in data['ics_url']
+        assert 'prep=' not in data['ics_url']
+        assert 'tf=' not in data['ics_url']
+
+    def test_get_calendar_url_endpoint_webcal_protocol(self):
+        """webcal_url uses webcal:// protocol."""
+        response = client.get("/api/calendar-url")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data['webcal_url'].startswith('webcal://')
+        assert '/calendar.ics' in data['webcal_url']
+
+    def test_get_calendar_url_endpoint_google_url_format(self):
+        """Google URL uses correct format."""
+        response = client.get("/api/calendar-url")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data['google_url'].startswith('https://calendar.google.com/calendar/r?cid=')
+        # webcal URL should be encoded in the cid parameter
+        assert 'webcal%3A%2F%2F' in data['google_url']
+
+    def test_get_calendar_url_endpoint_outlook365_url_format(self):
+        """Outlook 365 URL uses correct format."""
+        response = client.get("/api/calendar-url")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data['outlook365_url'].startswith('https://outlook.office.com/calendar/0/addfromweb?url=')
+
+    def test_get_calendar_url_endpoint_outlook_url_format(self):
+        """Outlook.com URL uses correct format."""
+        response = client.get("/api/calendar-url")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data['outlook_url'].startswith('https://outlook.live.com/calendar/0/addfromweb?url=')
+
+    def test_get_calendar_url_endpoint_url_encoding(self):
+        """URLs are properly encoded for special characters."""
+        # Test with parameters that contain special characters
+        response = client.get("/api/calendar-url?season=test%20season")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # The season parameter should be in the URL (encoded)
+        assert 'season=' in data['ics_url']
+
+    def test_get_calendar_url_endpoint_prep_validation(self):
+        """Prep time validation (15-180 minutes)."""
+        # Too low
+        response_low = client.get("/api/calendar-url?mode=player&prep=5")
+        assert response_low.status_code == 422
+
+        # Too high
+        response_high = client.get("/api/calendar-url?mode=player&prep=200")
+        assert response_high.status_code == 422
+
+        # Valid
+        response_valid = client.get("/api/calendar-url?mode=player&prep=60")
+        assert response_valid.status_code == 200
+
+
 class TestCalendarEndpoint:
     """Tests for calendar ICS endpoint."""
 

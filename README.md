@@ -100,6 +100,7 @@ The preview shows all matches for the season with dates, scores, and venue addre
 |----------|-------------|
 | `GET /` | Web interface |
 | `GET /calendar.ics` | ICS calendar feed |
+| `GET /api/calendar-url` | Generate subscription URLs for all calendar platforms |
 | `GET /api/seasons` | List all seasons |
 | `GET /api/competitions` | List all competitions |
 | `GET /api/competitions/{season_id}` | Competitions for a season |
@@ -292,7 +293,7 @@ pytest tests/test_calendar_service.py
 ```
 
 **Test Suite Overview:**
-- **162 tests** covering all application layers
+- **172 tests** covering all application layers
 - **~4 seconds** execution time
 - **Coverage**: config (100%), calendar_service (89%), sqlite_db (87%), main (78%)
 
@@ -302,7 +303,7 @@ pytest tests/test_calendar_service.py
 | `test_rate_limiter.py` | 9 | Rate limiting logic |
 | `test_calendar_service.py` | 49 | ICS generation, escaping, RTL |
 | `test_data_service.py` | 18 | Data access layer |
-| `test_main_api.py` | 46 | FastAPI endpoints, ID-based filtering |
+| `test_main_api.py` | 56 | FastAPI endpoints, calendar URL generation |
 | `test_integration.py` | 7 | End-to-end workflows |
 | `test_storage.py` | 22 | Database operations, ID filtering |
 
