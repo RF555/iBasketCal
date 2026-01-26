@@ -353,6 +353,7 @@ class SupabaseDatabase(DatabaseInterface):
         competition_name: Optional[str] = None,
         team_name: Optional[str] = None,
         group_id: Optional[str] = None,
+        team_id: Optional[str] = None,
         status: Optional[str] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
@@ -368,8 +369,15 @@ class SupabaseDatabase(DatabaseInterface):
         if competition_name:
             query = query.ilike('competition_name', f'%{competition_name}%')
 
-        if team_name:
-            # OR condition for home or away team
+        # team_id takes precedence over team_name (team_name is deprecated)
+        if team_id:
+            # OR condition for home or away team (exact match)
+            query = query.or_(
+                f"home_team_id.eq.{team_id},"
+                f"away_team_id.eq.{team_id}"
+            )
+        elif team_name:
+            # OR condition for home or away team (LIKE match - deprecated)
             query = query.or_(
                 f"home_team_name.ilike.%{team_name}%,"
                 f"away_team_name.ilike.%{team_name}%"
@@ -432,6 +440,43 @@ class SupabaseDatabase(DatabaseInterface):
                 .order('name')
                 .execute()
             )
+
+        return [{'id': r['id'], 'name': r['name'], 'logo': r['logo']} for r in response.data]
+
+    def get_teams_by_group(self, group_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all teams that have played in a specific competition group.
+
+        Uses a two-stage query: get team IDs from matches, then fetch team details.
+        """
+        client = self._get_client()
+
+        # Stage 1: Get all team IDs from matches in this group
+        matches_response = (
+            client.table('matches')
+            .select('home_team_id, away_team_id')
+            .eq('group_id', group_id)
+            .execute()
+        )
+
+        team_ids = set()
+        for row in matches_response.data:
+            if row.get('home_team_id'):
+                team_ids.add(row['home_team_id'])
+            if row.get('away_team_id'):
+                team_ids.add(row['away_team_id'])
+
+        if not team_ids:
+            return []
+
+        # Stage 2: Fetch team details
+        response = (
+            client.table('teams')
+            .select('id, name, logo')
+            .in_('id', list(team_ids))
+            .order('name')
+            .execute()
+        )
 
         return [{'id': r['id'], 'name': r['name'], 'logo': r['logo']} for r in response.data]
 

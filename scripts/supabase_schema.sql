@@ -94,6 +94,8 @@ CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(date);
 CREATE INDEX IF NOT EXISTS idx_matches_status ON matches(status);
 CREATE INDEX IF NOT EXISTS idx_matches_home_team ON matches(home_team_name);
 CREATE INDEX IF NOT EXISTS idx_matches_away_team ON matches(away_team_name);
+CREATE INDEX IF NOT EXISTS idx_matches_home_team_id ON matches(home_team_id);
+CREATE INDEX IF NOT EXISTS idx_matches_away_team_id ON matches(away_team_id);
 
 -- Groups indexes
 CREATE INDEX IF NOT EXISTS idx_groups_season ON groups(season_id);

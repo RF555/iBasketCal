@@ -151,28 +151,53 @@ class DataService:
         self,
         season_id: Optional[str] = None,
         competition_name: Optional[str] = None,
-        team_name: Optional[str] = None
+        team_name: Optional[str] = None,
+        group_id: Optional[str] = None,
+        team_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Get all matches with optional filters.
 
         Args:
             season_id: Filter by season ID
-            competition_name: Filter by competition name (partial match)
-            team_name: Filter by team name (partial match, either team)
+            competition_name: Filter by competition name (partial match, deprecated)
+            team_name: Filter by team name (partial match, deprecated - use team_id)
+            group_id: Filter by competition group ID (exact match, preferred)
+            team_id: Filter by team ID (exact match, preferred over team_name)
 
         Returns:
             List of match dictionaries with metadata
+
+        Note:
+            ID-based filters (group_id, team_id) are preferred over name-based filters.
+            If both team_id and team_name are provided, team_id takes precedence.
         """
         return self.db.get_matches(
             season_id=season_id,
             competition_name=competition_name,
-            team_name=team_name
+            team_name=team_name,
+            group_id=group_id,
+            team_id=team_id
         )
 
     def get_teams(self, season_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all unique teams, optionally filtered by season."""
         return self.db.get_teams(season_id=season_id)
+
+    def get_teams_by_group(self, group_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all teams that have played in a specific competition group.
+
+        This is the preferred method for populating team dropdowns,
+        as it returns only teams relevant to the selected league/group.
+
+        Args:
+            group_id: The competition group ID
+
+        Returns:
+            List of team dictionaries with 'id', 'name', 'logo'
+        """
+        return self.db.get_teams_by_group(group_id)
 
     def search_teams(
         self,

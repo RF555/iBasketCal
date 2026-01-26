@@ -194,6 +194,8 @@ class SQLiteDatabase(DatabaseInterface):
                 CREATE INDEX IF NOT EXISTS idx_matches_status ON matches(status);
                 CREATE INDEX IF NOT EXISTS idx_matches_home_team ON matches(home_team_name);
                 CREATE INDEX IF NOT EXISTS idx_matches_away_team ON matches(away_team_name);
+                CREATE INDEX IF NOT EXISTS idx_matches_home_team_id ON matches(home_team_id);
+                CREATE INDEX IF NOT EXISTS idx_matches_away_team_id ON matches(away_team_id);
                 CREATE INDEX IF NOT EXISTS idx_groups_season ON groups(season_id);
                 CREATE INDEX IF NOT EXISTS idx_competitions_season ON competitions(season_id);
             ''')
@@ -415,6 +417,7 @@ class SQLiteDatabase(DatabaseInterface):
         competition_name: Optional[str] = None,
         team_name: Optional[str] = None,
         group_id: Optional[str] = None,
+        team_id: Optional[str] = None,
         status: Optional[str] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
@@ -432,7 +435,11 @@ class SQLiteDatabase(DatabaseInterface):
             query += " AND competition_name LIKE ?"
             params.append(f"%{competition_name}%")
 
-        if team_name:
+        # team_id takes precedence over team_name (team_name is deprecated)
+        if team_id:
+            query += " AND (home_team_id = ? OR away_team_id = ?)"
+            params.extend([team_id, team_id])
+        elif team_name:
             query += " AND (home_team_name LIKE ? OR away_team_name LIKE ?)"
             params.extend([f"%{team_name}%", f"%{team_name}%"])
 
@@ -478,6 +485,28 @@ class SQLiteDatabase(DatabaseInterface):
             rows = conn.execute(
                 'SELECT id, name, logo FROM teams ORDER BY name'
             ).fetchall()
+
+        return [{'id': r['id'], 'name': r['name'], 'logo': r['logo']} for r in rows]
+
+    def get_teams_by_group(self, group_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all teams that have played in a specific competition group.
+
+        Uses UNION to efficiently combine home and away teams from matches.
+        """
+        conn = self._get_connection()
+
+        # Use UNION to get all unique team IDs from both home and away positions
+        rows = conn.execute('''
+            SELECT DISTINCT t.id, t.name, t.logo
+            FROM teams t
+            WHERE t.id IN (
+                SELECT home_team_id FROM matches WHERE group_id = ?
+                UNION
+                SELECT away_team_id FROM matches WHERE group_id = ?
+            )
+            ORDER BY t.name
+        ''', (group_id, group_id)).fetchall()
 
         return [{'id': r['id'], 'name': r['name'], 'logo': r['logo']} for r in rows]
 
