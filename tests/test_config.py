@@ -65,6 +65,36 @@ class TestConfigHelpers:
             result = config._get_str('TEST_STR', 'default')
             assert result == 'test_value'
 
+    def test_get_int_empty_string(self):
+        """Empty string returns default value."""
+        with patch.dict(os.environ, {'TEST_INT': ''}, clear=False):
+            result = config._get_int('TEST_INT', 42)
+            assert result == 42
+
+    def test_get_int_zero(self):
+        """Zero is a valid integer value."""
+        with patch.dict(os.environ, {'TEST_INT': '0'}, clear=False):
+            result = config._get_int('TEST_INT', 42)
+            assert result == 0
+
+    def test_get_int_negative_value(self):
+        """Negative integers are parsed correctly."""
+        with patch.dict(os.environ, {'TEST_INT': '-100'}, clear=False):
+            result = config._get_int('TEST_INT', 42)
+            assert result == -100
+
+    def test_get_bool_empty_string(self):
+        """Empty string returns False."""
+        with patch.dict(os.environ, {'TEST_BOOL': ''}, clear=False):
+            result = config._get_bool('TEST_BOOL', True)
+            assert result is False
+
+    def test_get_str_empty_string(self):
+        """Empty string is a valid string value."""
+        with patch.dict(os.environ, {'TEST_STR': ''}, clear=False):
+            result = config._get_str('TEST_STR', 'default')
+            assert result == ''
+
 
 class TestConfigValues:
     """Tests for configuration constants."""
@@ -103,8 +133,9 @@ class TestConfigValues:
 
     def test_db_type_default(self):
         """Default database type is sqlite."""
-        # config module has already loaded, check that it uses default correctly
-        with patch.dict(os.environ, {}, clear=False):
+        # Clear DB_TYPE from environment to test the default
+        env_without_db_type = {k: v for k, v in os.environ.items() if k != 'DB_TYPE'}
+        with patch.dict(os.environ, env_without_db_type, clear=True):
             db_type = config._get_str('DB_TYPE', 'sqlite')
             assert db_type == 'sqlite'
 

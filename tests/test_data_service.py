@@ -346,3 +346,351 @@ class TestDataServiceScraperProperty:
 
             # Should be the same instance
             assert scraper1 is scraper2
+
+
+class TestDataAccessMethodsDelegation:
+    """Tests for data access method delegation to database."""
+
+    def setup_method(self):
+        """Reset before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after each test."""
+        reset_database()
+
+    def test_get_seasons_delegates_correctly(self, test_data_dir):
+        """Verify get_seasons calls db.get_seasons()."""
+        mock_db = Mock()
+        mock_db.get_seasons.return_value = [{'_id': 's1', 'name': 'Season 1'}]
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            result = service.get_seasons()
+
+            mock_db.get_seasons.assert_called_once()
+            assert len(result) == 1
+            assert result[0]['name'] == 'Season 1'
+
+    def test_get_competitions_delegates_with_season_id(self, test_data_dir):
+        """Verify get_competitions passes season_id to db."""
+        mock_db = Mock()
+        mock_db.get_competitions.return_value = [{'id': 'c1', 'name': 'League A'}]
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            result = service.get_competitions('season_2024')
+
+            mock_db.get_competitions.assert_called_once_with('season_2024')
+            assert len(result) == 1
+
+    def test_get_all_competitions_delegates_correctly(self, test_data_dir):
+        """Verify get_all_competitions calls db.get_all_competitions()."""
+        mock_db = Mock()
+        mock_db.get_all_competitions.return_value = [
+            {'id': 'c1', 'name': 'League A'},
+            {'id': 'c2', 'name': 'League B'}
+        ]
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            result = service.get_all_competitions()
+
+            mock_db.get_all_competitions.assert_called_once()
+            assert len(result) == 2
+
+    def test_get_matches_delegates_with_group_id(self, test_data_dir):
+        """Verify get_matches passes group_id to db."""
+        mock_db = Mock()
+        mock_db.get_matches.return_value = [{'id': 'm1'}, {'id': 'm2'}]
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            result = service.get_matches('group_123')
+
+            mock_db.get_matches.assert_called_once_with(group_id='group_123')
+            assert len(result) == 2
+
+    def test_get_all_matches_with_season_filter(self, test_data_dir):
+        """Verify get_all_matches passes season_id correctly."""
+        mock_db = Mock()
+        mock_db.get_matches.return_value = [{'id': 'm1', 'date': '2024-10-15'}]
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            result = service.get_all_matches(season_id='season_2024')
+
+            mock_db.get_matches.assert_called_once()
+            call_args = mock_db.get_matches.call_args
+            assert call_args[1]['season_id'] == 'season_2024'
+
+    def test_get_all_matches_with_group_id_filter(self, test_data_dir):
+        """Verify get_all_matches passes group_id correctly."""
+        mock_db = Mock()
+        mock_db.get_matches.return_value = []
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            service.get_all_matches(group_id='group_abc')
+
+            call_args = mock_db.get_matches.call_args
+            assert call_args[1]['group_id'] == 'group_abc'
+
+    def test_get_all_matches_with_team_id_filter(self, test_data_dir):
+        """Verify get_all_matches passes team_id correctly."""
+        mock_db = Mock()
+        mock_db.get_matches.return_value = []
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            service.get_all_matches(team_id='team_xyz')
+
+            call_args = mock_db.get_matches.call_args
+            assert call_args[1]['team_id'] == 'team_xyz'
+
+    def test_get_all_matches_with_multiple_filters(self, test_data_dir):
+        """Verify get_all_matches passes all filters together."""
+        mock_db = Mock()
+        mock_db.get_matches.return_value = []
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            service.get_all_matches(
+                season_id='season_2024',
+                group_id='group_123',
+                team_id='team_abc',
+                competition_name='Premier',
+                team_name='Maccabi'
+            )
+
+            call_args = mock_db.get_matches.call_args
+            assert call_args[1]['season_id'] == 'season_2024'
+            assert call_args[1]['group_id'] == 'group_123'
+            assert call_args[1]['team_id'] == 'team_abc'
+            assert call_args[1]['competition_name'] == 'Premier'
+            assert call_args[1]['team_name'] == 'Maccabi'
+
+    def test_get_teams_without_season(self, test_data_dir):
+        """Verify get_teams calls db with season_id=None."""
+        mock_db = Mock()
+        mock_db.get_teams.return_value = [{'id': 't1', 'name': 'Team A'}]
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            result = service.get_teams()
+
+            mock_db.get_teams.assert_called_once_with(season_id=None)
+            assert len(result) == 1
+
+    def test_get_teams_with_season(self, test_data_dir):
+        """Verify get_teams passes season_id to db."""
+        mock_db = Mock()
+        mock_db.get_teams.return_value = [{'id': 't1', 'name': 'Team A'}]
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            result = service.get_teams(season_id='season_2024')
+
+            mock_db.get_teams.assert_called_once_with(season_id='season_2024')
+
+    def test_get_teams_by_group_delegates(self, test_data_dir):
+        """Verify get_teams_by_group passes group_id to db."""
+        mock_db = Mock()
+        mock_db.get_teams_by_group.return_value = [
+            {'id': 't1', 'name': 'Team A'},
+            {'id': 't2', 'name': 'Team B'}
+        ]
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            result = service.get_teams_by_group('group_123')
+
+            mock_db.get_teams_by_group.assert_called_once_with('group_123')
+            assert len(result) == 2
+
+    def test_search_teams_without_season(self, test_data_dir):
+        """Verify search_teams passes query with season_id=None."""
+        mock_db = Mock()
+        mock_db.search_teams.return_value = [{'id': 't1', 'name': 'Maccabi'}]
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            result = service.search_teams('Maccabi')
+
+            mock_db.search_teams.assert_called_once_with('Maccabi', season_id=None)
+            assert len(result) == 1
+
+    def test_search_teams_with_season(self, test_data_dir):
+        """Verify search_teams passes both query and season_id."""
+        mock_db = Mock()
+        mock_db.search_teams.return_value = []
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            service.search_teams('Hapoel', season_id='season_2024')
+
+            mock_db.search_teams.assert_called_once_with('Hapoel', season_id='season_2024')
+
+    def test_get_cache_info_delegates_to_db(self, test_data_dir):
+        """Verify get_cache_info calls db.get_cache_info()."""
+        mock_db = Mock()
+        mock_db.get_cache_info.return_value = {
+            'exists': True,
+            'stale': False,
+            'last_updated': '2024-01-15T12:00:00Z'
+        }
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+            result = service.get_cache_info()
+
+            mock_db.get_cache_info.assert_called_once()
+            assert result['exists'] is True
+            assert result['stale'] is False
+
+
+class TestScraperPropertyLazyInit:
+    """Tests for scraper property lazy initialization."""
+
+    def setup_method(self):
+        """Reset before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after each test."""
+        reset_database()
+
+    def test_scraper_lazy_initialization(self, test_data_dir):
+        """Verify scraper is only created on first access."""
+        mock_db = Mock()
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+
+            # Initially None
+            assert service._scraper is None
+
+            # Access property
+            scraper = service.scraper
+
+            # Now initialized
+            assert scraper is not None
+            assert service._scraper is scraper
+
+    def test_scraper_reuses_instance(self, test_data_dir):
+        """Verify scraper property returns same instance on multiple accesses."""
+        mock_db = Mock()
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+
+            # Access multiple times
+            scraper1 = service.scraper
+            scraper2 = service.scraper
+            scraper3 = service.scraper
+
+            # All should be the same instance
+            assert scraper1 is scraper2
+            assert scraper2 is scraper3
+
+
+class TestRunScrapeDetails:
+    """Tests for _run_scrape method edge cases."""
+
+    def setup_method(self):
+        """Reset before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after each test."""
+        reset_database()
+
+    def test_run_scrape_sets_error_on_failure(self, test_data_dir):
+        """Verify error is captured when scrape fails."""
+        mock_db = Mock()
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+
+            # Mock scraper that raises exception
+            error_scraper = Mock()
+            error_scraper.scrape.side_effect = RuntimeError("Token extraction failed")
+            service._scraper = error_scraper
+
+            # Run scrape
+            service._run_scrape()
+
+            # Error should be captured
+            error = service.get_last_scrape_error()
+            assert error is not None
+            assert "Token extraction failed" in error
+
+    def test_run_scrape_clears_scraping_flag_on_error(self, test_data_dir):
+        """Verify _is_scraping flag is cleared after error."""
+        mock_db = Mock()
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+
+            # Mock failing scraper
+            error_scraper = Mock()
+            error_scraper.scrape.side_effect = Exception("Network error")
+            service._scraper = error_scraper
+
+            # Run scrape
+            service._run_scrape()
+
+            # Flag should be cleared even after error
+            assert service.is_scraping() is False
+
+    def test_run_scrape_skips_when_already_scraping(self, test_data_dir):
+        """Verify concurrent scrape calls are skipped."""
+        mock_db = Mock()
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+
+            # Mock scraper
+            mock_scraper = Mock()
+            service._scraper = mock_scraper
+
+            # Simulate already scraping
+            service._is_scraping = True
+
+            # Try to run scrape
+            service._run_scrape()
+
+            # Scraper should NOT have been called
+            mock_scraper.scrape.assert_not_called()
+
+
+class TestGetDataScrapingBehavior:
+    """Tests for get_data scraping triggers."""
+
+    def setup_method(self):
+        """Reset before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after each test."""
+        reset_database()
+
+    def test_get_data_scrapes_when_no_cache(self, test_data_dir):
+        """Verify scrape is triggered when cache doesn't exist."""
+        mock_db = Mock()
+        mock_db.get_cache_info.return_value = {'exists': False, 'stale': False}
+        mock_db.get_seasons.return_value = []
+
+        with patch('src.services.data_service.get_database', return_value=mock_db):
+            service = DataService(cache_dir=test_data_dir)
+
+            # Mock scraper
+            mock_scraper = Mock()
+            mock_scraper.scrape.return_value = None
+            service._scraper = mock_scraper
+
+            # Get data when cache doesn't exist
+            service.get_data(force_refresh=False)
+
+            # Scraper should have been called
+            mock_scraper.scrape.assert_called_once()

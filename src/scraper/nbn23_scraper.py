@@ -10,7 +10,7 @@ Includes automatic token refresh on 401 errors.
 from playwright.sync_api import sync_playwright
 import requests
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Union, Dict, List, Any, TYPE_CHECKING
 import time
@@ -167,7 +167,8 @@ class NBN23Scraper:
 
     def scrape(self) -> Dict[str, Any]:
         """
-        Main scraping method. Fetches all data and saves to SQLite.
+        Main scraping method. Fetches data and saves to SQLite.
+        Optimized to only process active or recent seasons.
 
         Returns:
             Summary dict with counts and timing
@@ -189,9 +190,37 @@ class NBN23Scraper:
             self.db.save_seasons(seasons)
         print(f"    [+] Saved {len(seasons)} seasons")
 
-        # Step 3: Fetch and save competitions for each season
-        all_groups = []
+        # FILTER: Define "recent" as ended less than 45 days ago
+        # This allows catching up on final games/playoffs of a just-finished season
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=45)
+        
+        active_seasons = []
         for season in seasons:
+            end_date_str = season.get('endDate')
+            
+            # Always include if no end date (assumed ongoing)
+            if not end_date_str:
+                active_seasons.append(season)
+                continue
+
+            try:
+                # Handle ISO format dates (e.g., "2024-06-30T23:59:59.000Z")
+                normalized_end_date_str = end_date_str.replace('Z', '+00:00')
+                end_date = datetime.fromisoformat(normalized_end_date_str)
+
+                if end_date > cutoff_date:
+                    active_seasons.append(season)
+                else:
+                    print(f"    [-] Skipping season '{season.get('name')}' (ended {end_date_str})")
+            except ValueError:
+                print(f"    [!] Could not parse date '{end_date_str}', including season {season.get('name')}")
+                active_seasons.append(season)
+
+        print(f"    [*] filtered to {len(active_seasons)} active/recent seasons (out of {len(seasons)})")
+
+        # Step 3: Fetch and save competitions ONLY for active seasons
+        all_groups = []
+        for season in active_seasons:
             season_id = season.get('_id')
             if not season_id:
                 continue
@@ -216,7 +245,7 @@ class NBN23Scraper:
                             'group_name': group.get('name', '')
                         })
 
-        print(f"    [+] Found {len(all_groups)} total groups")
+        print(f"    [+] Found {len(all_groups)} total groups for the seasons")
 
         # Step 4: Fetch calendars and standings for all groups
         total_matches = 0
@@ -226,7 +255,7 @@ class NBN23Scraper:
                 continue
 
             # Progress indicator
-            if (i + 1) % 100 == 0 or i == 0:
+            if (i + 1) % 50 == 0 or i == 0:
                 print(f"    [*] Processing group {i + 1}/{len(all_groups)}...")
 
             # Fetch calendar

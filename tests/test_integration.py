@@ -279,3 +279,336 @@ class TestErrorRecovery:
         with patch('src.main.data_service.get_seasons', return_value=[]):
             response = client.get("/api/seasons")
             assert response.status_code == 200
+
+
+class TestFullApiWorkflow:
+    """Tests for complete API data flow through all layers."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_seasons_to_competitions_to_matches_flow(
+        self,
+        db_fixture,
+        sample_season_data,
+        sample_competition_data,
+        sample_match_data
+    ):
+        """Complete data flow: seasons → competitions → matches."""
+        # Step 1: Save hierarchical data to database
+        db_fixture.save_seasons(sample_season_data)
+        db_fixture.save_competitions('season_2024_2025', sample_competition_data)
+        db_fixture.save_matches(
+            group_id='group_premier_a',
+            calendar_data=sample_match_data,
+            competition_name='Premier League',
+            group_name='Division A',
+            season_id='season_2024_2025'
+        )
+        db_fixture.update_scrape_timestamp()
+
+        # Step 2: Query seasons through DataService
+        with patch('src.services.data_service.get_database', return_value=db_fixture):
+            data_service = DataService()
+            seasons = data_service.get_seasons()
+
+            # Verify seasons
+            assert len(seasons) == 2
+            assert seasons[0]['_id'] == 'season_2024_2025'
+
+            # Step 3: Query competitions for a season
+            competitions = data_service.get_competitions('season_2024_2025')
+            assert len(competitions) == 2
+            # Competitions are sorted alphabetically
+            comp_names = [c['name'] for c in competitions]
+            assert 'Premier League' in comp_names
+            assert 'National League' in comp_names
+
+            # Step 4: Query matches
+            matches = data_service.get_all_matches(season_id='season_2024_2025')
+            assert len(matches) == 2
+
+            # Verify match metadata is enriched
+            assert matches[0]['_competition'] == 'Premier League'
+            assert matches[0]['_group'] == 'Division A'
+            assert matches[0]['_season_id'] == 'season_2024_2025'
+            assert matches[0]['_group_id'] == 'group_premier_a'
+
+    def test_calendar_generation_from_stored_data(
+        self,
+        db_fixture,
+        sample_season_data,
+        sample_match_data
+    ):
+        """Generate ICS calendar from database-stored matches."""
+        # Save data to database
+        db_fixture.save_seasons(sample_season_data)
+        db_fixture.save_matches(
+            group_id='group_premier_a',
+            calendar_data=sample_match_data,
+            competition_name='Premier League',
+            group_name='Division A',
+            season_id='season_2024_2025'
+        )
+
+        # Retrieve matches via DataService
+        with patch('src.services.data_service.get_database', return_value=db_fixture):
+            data_service = DataService()
+            matches = data_service.get_all_matches()
+
+            assert len(matches) == 2
+
+            # Generate calendar
+            calendar_service = CalendarService()
+            ics = calendar_service.generate_ics(matches, "Test Calendar")
+
+            # Verify ICS structure
+            assert 'BEGIN:VCALENDAR' in ics
+            assert 'END:VCALENDAR' in ics
+
+            # Count VEVENT entries (should match number of matches)
+            vevent_count = ics.count('BEGIN:VEVENT')
+            assert vevent_count == 2
+
+            # Verify team names appear
+            assert 'Maccabi Tel Aviv' in ics
+            assert 'Hapoel Jerusalem' in ics
+
+
+class TestPlayerModeIntegration:
+    """Tests for player mode calendar generation."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_player_mode_calendar_generation(
+        self,
+        db_fixture,
+        sample_season_data,
+        sample_match_data
+    ):
+        """Generate ICS with player mode - events should start earlier."""
+        # Save matches
+        db_fixture.save_seasons(sample_season_data)
+        db_fixture.save_matches(
+            group_id='group1',
+            calendar_data=sample_match_data,
+            competition_name='Premier League',
+            group_name='Division A',
+            season_id='season_2024_2025'
+        )
+
+        with patch('src.services.data_service.get_database', return_value=db_fixture):
+            data_service = DataService()
+            matches = data_service.get_all_matches()
+
+            # Generate player mode calendar with 60 min prep
+            calendar_service = CalendarService()
+            ics_player = calendar_service.generate_ics(
+                matches,
+                "Player Calendar",
+                player_mode=True,
+                prep_time_minutes=60
+            )
+
+            # Verify calendar was generated
+            assert 'BEGIN:VCALENDAR' in ics_player
+            assert 'BEGIN:VEVENT' in ics_player
+
+            # Verify player mode indicator in event
+            # The match date is 2024-10-15T18:00:00Z
+            # With 60 min prep, should start at 17:00:00Z
+            assert 'DTSTART' in ics_player
+            # Check that prep time is mentioned somewhere
+            assert 'Prep time' in ics_player or '60 min' in ics_player or '17:00' in ics_player
+
+    def test_fan_vs_player_mode_comparison(
+        self,
+        db_fixture,
+        sample_season_data,
+        sample_match_data
+    ):
+        """Compare fan mode vs player mode - verify different start times."""
+        # Save data
+        db_fixture.save_seasons(sample_season_data)
+        db_fixture.save_matches(
+            group_id='group1',
+            calendar_data=sample_match_data,
+            competition_name='Premier League',
+            group_name='Division A',
+            season_id='season_2024_2025'
+        )
+
+        with patch('src.services.data_service.get_database', return_value=db_fixture):
+            data_service = DataService()
+            matches = data_service.get_all_matches()
+            calendar_service = CalendarService()
+
+            # Generate fan mode calendar
+            ics_fan = calendar_service.generate_ics(matches, "Fan Calendar", player_mode=False)
+
+            # Generate player mode calendar with 90 min prep
+            ics_player = calendar_service.generate_ics(
+                matches,
+                "Player Calendar",
+                player_mode=True,
+                prep_time_minutes=90
+            )
+
+            # Both should be valid calendars
+            assert 'BEGIN:VCALENDAR' in ics_fan
+            assert 'BEGIN:VCALENDAR' in ics_player
+
+            # Both should have the same number of events
+            assert ics_fan.count('BEGIN:VEVENT') == ics_player.count('BEGIN:VEVENT')
+
+            # Extract DTSTART from within VEVENT (not VTIMEZONE)
+            # Find first VEVENT, then find DTSTART within it
+            fan_vevent_pos = ics_fan.find('BEGIN:VEVENT')
+            fan_vevent_end_pos = ics_fan.find('END:VEVENT', fan_vevent_pos)
+            fan_vevent_section = ics_fan[fan_vevent_pos:fan_vevent_end_pos]
+            fan_start_pos = fan_vevent_section.find('DTSTART')
+
+            player_vevent_pos = ics_player.find('BEGIN:VEVENT')
+            player_vevent_end_pos = ics_player.find('END:VEVENT', player_vevent_pos)
+            player_vevent_section = ics_player[player_vevent_pos:player_vevent_end_pos]
+            player_start_pos = player_vevent_section.find('DTSTART')
+
+            assert fan_start_pos > 0
+            assert player_start_pos > 0
+
+            # The start times should be different (player mode starts earlier)
+            fan_start_line = fan_vevent_section[fan_start_pos:fan_start_pos+50]
+            player_start_line = player_vevent_section[player_start_pos:player_start_pos+50]
+
+            assert fan_start_line != player_start_line
+
+
+class TestEmptyDatabaseResponses:
+    """Tests for API behavior with empty database."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_empty_db_returns_empty_seasons(self, db_fixture):
+        """Empty database should return empty list, not error."""
+        # Verify database is empty
+        cache_info = db_fixture.get_cache_info()
+        assert cache_info['exists'] is False
+
+        # Query seasons from empty database
+        with patch('src.services.data_service.get_database', return_value=db_fixture):
+            data_service = DataService()
+            seasons = data_service.get_seasons()
+
+            # Should return empty list, not None or error
+            assert seasons is not None
+            assert isinstance(seasons, list)
+            assert len(seasons) == 0
+
+    def test_empty_db_calendar_is_valid(self, db_fixture):
+        """Generate valid ICS even with no matches."""
+        # No data in database
+        with patch('src.services.data_service.get_database', return_value=db_fixture):
+            data_service = DataService()
+            matches = data_service.get_all_matches()
+
+            assert len(matches) == 0
+
+            # Generate calendar from empty matches
+            calendar_service = CalendarService()
+            ics = calendar_service.generate_ics(matches, "Empty Calendar")
+
+            # Should still be a valid calendar structure
+            assert 'BEGIN:VCALENDAR' in ics
+            assert 'END:VCALENDAR' in ics
+            assert 'VERSION:2.0' in ics
+
+            # Should have no events
+            assert 'BEGIN:VEVENT' not in ics
+
+            # Verify it's properly formatted (CRLF line endings)
+            assert '\r\n' in ics
+
+
+class TestCacheInfoIntegration:
+    """Tests for cache info reporting."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_cache_info_after_data_saved(
+        self,
+        db_fixture,
+        sample_season_data,
+        sample_competition_data,
+        sample_match_data
+    ):
+        """Cache info should reflect saved data with statistics."""
+        # Initially empty
+        cache_info = db_fixture.get_cache_info()
+        assert cache_info['exists'] is False
+
+        # Save comprehensive data
+        db_fixture.save_seasons(sample_season_data)
+        db_fixture.save_competitions('season_2024_2025', sample_competition_data)
+        db_fixture.save_matches(
+            group_id='group_premier_a',
+            calendar_data=sample_match_data,
+            competition_name='Premier League',
+            group_name='Division A',
+            season_id='season_2024_2025'
+        )
+        db_fixture.update_scrape_timestamp()
+
+        # Check cache info now reports data
+        cache_info = db_fixture.get_cache_info()
+
+        assert cache_info['exists'] is True
+        assert cache_info['stale'] is False  # Just updated
+        assert 'last_updated' in cache_info
+        assert cache_info['last_updated'] is not None
+
+        # Verify stats
+        stats = cache_info['stats']
+        assert stats['seasons'] == 2
+        assert stats['competitions'] >= 1
+        assert stats['matches'] == 2
+
+    def test_cache_info_with_no_data(self, db_fixture):
+        """Cache info should report exists=False for empty database."""
+        # Fresh database
+        cache_info = db_fixture.get_cache_info()
+
+        assert cache_info['exists'] is False
+        assert 'last_updated' in cache_info
+        assert cache_info['last_updated'] is None
+
+        # Stats should be empty dict or all zeros
+        stats = cache_info['stats']
+        assert isinstance(stats, dict)
+        # Either empty dict or dict with zero counts
+        if stats:
+            assert stats.get('seasons', 0) == 0
+            assert stats.get('competitions', 0) == 0
+            assert stats.get('matches', 0) == 0

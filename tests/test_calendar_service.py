@@ -743,6 +743,278 @@ class TestTimeFormat:
         assert 'Game Time: 20:30' in unfolded
 
 
+class TestTimezoneValidation:
+    """Tests for timezone validation."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = CalendarService()
+
+    def test_invalid_timezone_falls_back_to_default(self):
+        """Invalid timezone falls back to Asia/Jerusalem."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T17:00:00Z',  # 5 PM UTC = 8 PM Jerusalem
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics(
+            [match],
+            player_mode=True,
+            prep_time_minutes=60,
+            display_timezone='Invalid/TZ'
+        )
+
+        # Should fall back to Jerusalem time (UTC+3 in October)
+        assert 'SUMMARY:20:00 Team A vs Team B' in ics
+
+    def test_valid_custom_timezone(self):
+        """Valid custom timezone is accepted and used."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T20:00:00Z',  # 8 PM UTC = 4 PM New York (UTC-4 in Oct)
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics(
+            [match],
+            player_mode=True,
+            prep_time_minutes=60,
+            display_timezone='America/New_York'
+        )
+
+        # Should show New York time (UTC-4 in October = EDT)
+        assert 'SUMMARY:16:00 Team A vs Team B' in ics
+
+
+class TestLocationBuilding:
+    """Tests for location field building."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = CalendarService()
+
+    def test_location_with_all_parts(self):
+        """Location with place, town, and address."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T18:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {
+                'place': 'Menora Arena',
+                'town': 'Tel Aviv',
+                'address': 'Yigal Alon 51'
+            }
+        }
+
+        ics = self.service.generate_ics([match])
+
+        # All parts joined with comma and space (comma is escaped)
+        assert 'LOCATION:Menora Arena\\, Tel Aviv\\, Yigal Alon 51' in ics
+
+    def test_location_with_only_place(self):
+        """Location with only place specified."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T18:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {
+                'place': 'Stadium',
+                'town': '',  # Empty
+                'address': None  # None
+            }
+        }
+
+        ics = self.service.generate_ics([match])
+
+        assert 'LOCATION:Stadium' in ics
+        # Should not have trailing commas or 'None'
+        assert 'LOCATION:Stadium\\, \\,' not in ics
+
+    def test_location_with_no_court_data(self):
+        """Location with empty court dict."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T18:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'A'},
+            'awayTeam': {'id': 't2', 'name': 'B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match])
+
+        assert 'LOCATION:TBD' in ics
+
+
+class TestNullTeamData:
+    """Tests for null/missing team data."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = CalendarService()
+
+    def test_home_team_is_none(self):
+        """Handle None for homeTeam."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T18:00:00Z',
+            'homeTeam': None,  # Explicitly None
+            'awayTeam': {'id': 't2', 'name': 'Away Team'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match])
+
+        # Should use TBD for missing team
+        assert 'SUMMARY:TBD vs Away Team' in ics
+
+    def test_away_team_is_none(self):
+        """Handle None for awayTeam."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T18:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'Home Team'},
+            'awayTeam': None,  # Explicitly None
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match])
+
+        # Should use TBD for missing team
+        assert 'SUMMARY:Home Team vs TBD' in ics
+
+
+class TestScoreEdgeCases:
+    """Tests for score data edge cases."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = CalendarService()
+
+    def test_score_totals_with_non_dict_entry(self):
+        """Score totals containing non-dict values."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T18:00:00Z',
+            'status': 'CLOSED',
+            'homeTeam': {'id': 'home', 'name': 'Home Team'},
+            'awayTeam': {'id': 'away', 'name': 'Away Team'},
+            'court': {},
+            'score': {
+                'totals': [
+                    "invalid_entry",  # Non-dict
+                    {'teamId': 'home', 'total': 85},
+                    None,  # None
+                    {'teamId': 'away', 'total': 78}
+                ]
+            }
+        }
+
+        ics = self.service.generate_ics([match])
+
+        # Should handle gracefully and extract valid scores
+        assert 'SUMMARY:Home Team (85) vs Away Team (78)' in ics
+
+    def test_score_with_missing_team_id(self):
+        """Score total without teamId field."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T18:00:00Z',
+            'status': 'CLOSED',
+            'homeTeam': {'id': 'home', 'name': 'Home Team'},
+            'awayTeam': {'id': 'away', 'name': 'Away Team'},
+            'court': {},
+            'score': {
+                'totals': [
+                    {'total': 100},  # Missing teamId
+                    {'teamId': '', 'total': 50}  # Empty teamId
+                ]
+            }
+        }
+
+        ics = self.service.generate_ics([match])
+
+        # Scores should default to 0 when teamId not matched
+        assert 'SUMMARY:Home Team (0) vs Away Team (0)' in ics
+
+
+class TestModeAndFormatCombinations:
+    """Tests for combinations of player mode, time format, and timezone."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.service = CalendarService()
+
+    def test_player_mode_12h_custom_timezone(self):
+        """Player mode with 12-hour format and custom timezone."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T20:00:00Z',  # 8 PM UTC = 4 PM New York
+            'status': 'NOT_STARTED',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics(
+            [match],
+            player_mode=True,
+            prep_time_minutes=90,
+            time_format='12h',
+            display_timezone='America/New_York'
+        )
+
+        # Should show 4 PM in 12-hour format
+        assert 'SUMMARY:4:00 PM Team A vs Team B' in ics
+        # Event should start 90 minutes before (2:30 PM = 18:30 UTC)
+        assert 'DTSTART:20241015T183000Z' in ics
+
+    def test_live_game_fan_mode(self):
+        """LIVE status in fan mode."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T18:00:00Z',
+            'status': 'LIVE',
+            'homeTeam': {'id': 't1', 'name': 'Home'},
+            'awayTeam': {'id': 't2', 'name': 'Away'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics([match], player_mode=False)
+
+        # Fan mode: "LIVE: Home vs Away" (no time prefix)
+        assert 'SUMMARY:LIVE: Home vs Away' in ics
+
+    def test_live_game_player_mode(self):
+        """LIVE status in player mode."""
+        match = {
+            'id': 'm1',
+            'date': '2024-10-15T18:00:00Z',
+            'status': 'LIVE',
+            'homeTeam': {'id': 't1', 'name': 'Home'},
+            'awayTeam': {'id': 't2', 'name': 'Away'},
+            'court': {}
+        }
+
+        ics = self.service.generate_ics(
+            [match],
+            player_mode=True,
+            prep_time_minutes=60,
+            display_timezone='UTC'
+        )
+
+        # Player mode: "HH:MM LIVE: Home vs Away"
+        assert 'SUMMARY:18:00 LIVE: Home vs Away' in ics
+
+
 class TestTimezoneConversion:
     """Tests for timezone conversion in player mode."""
 
