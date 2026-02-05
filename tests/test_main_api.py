@@ -4,8 +4,9 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from fastapi.testclient import TestClient
 
-from src.main import app, RateLimiter, data_service, refresh_rate_limiter
+from src.main import app, RateLimiter, data_service, calendar_service, refresh_rate_limiter
 from src.storage import reset_database
+from src import config
 
 
 # Create a synchronous test client
@@ -845,6 +846,477 @@ class TestHealthEndpoint:
                     assert 'cache' in data
                     assert data['cache']['exists'] is True
                     assert 'database_size_mb' in data
+
+
+class TestAllCompetitionsEndpoint:
+    """Tests for GET /api/competitions (all competitions)."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_get_all_competitions_success(self, sample_competition_data):
+        """GET /api/competitions returns list from data_service.get_all_competitions()."""
+        with patch.object(data_service, 'get_all_competitions', return_value=sample_competition_data):
+            response = client.get("/api/competitions")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert isinstance(data, list)
+            assert len(data) == 2
+
+    def test_get_all_competitions_error(self):
+        """Service throws exception returns 500."""
+        with patch.object(data_service, 'get_all_competitions', side_effect=Exception("DB Connection Failed")):
+            response = client.get("/api/competitions")
+
+            assert response.status_code == 500
+            assert "DB Connection Failed" in response.json()["detail"]
+
+
+class TestMatchesFilterCombinations:
+    """Tests for matches endpoint with various filter combinations."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_matches_with_group_id_filter(self):
+        """Group_id param passed to get_all_matches."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            response = client.get("/api/matches?group_id=grp999")
+
+            assert response.status_code == 200
+            data_service.get_all_matches.assert_called_once_with(
+                season_id=None,
+                competition_name=None,
+                team_name=None,
+                group_id='grp999',
+                team_id=None
+            )
+
+    def test_matches_with_team_id_filter(self):
+        """Team_id param passed to get_all_matches."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            response = client.get("/api/matches?team_id=team888")
+
+            assert response.status_code == 200
+            data_service.get_all_matches.assert_called_once_with(
+                season_id=None,
+                competition_name=None,
+                team_name=None,
+                group_id=None,
+                team_id='team888'
+            )
+
+    def test_matches_with_all_filters(self):
+        """Season + competition + team + group_id + team_id all passed."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            response = client.get("/api/matches?season=s2024&competition=Liga&team=Hapoel&group_id=g100&team_id=t200")
+
+            assert response.status_code == 200
+            data_service.get_all_matches.assert_called_once_with(
+                season_id='s2024',
+                competition_name='Liga',
+                team_name='Hapoel',
+                group_id='g100',
+                team_id='t200'
+            )
+
+    def test_matches_service_error(self):
+        """Data_service raises exception returns 500."""
+        with patch.object(data_service, 'get_all_matches', side_effect=RuntimeError("Query failed")):
+            response = client.get("/api/matches")
+
+            assert response.status_code == 500
+            assert "Query failed" in response.json()["detail"]
+
+
+class TestTeamsEndpointPaths:
+    """Tests for teams endpoint with different filtering paths."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_teams_by_group_id(self):
+        """When group_id provided, calls get_teams_by_group."""
+        mock_teams = [
+            {'id': 't1', 'name': 'Team Alpha', 'logo': 'alpha.png'},
+            {'id': 't2', 'name': 'Team Beta', 'logo': 'beta.png'}
+        ]
+
+        with patch.object(data_service, 'get_teams_by_group', return_value=mock_teams):
+            response = client.get("/api/teams?group_id=grp456")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data) == 2
+            data_service.get_teams_by_group.assert_called_once_with('grp456')
+
+    def test_teams_search_query(self):
+        """When q provided, calls search_teams."""
+        mock_teams = [{'id': 't1', 'name': 'Maccabi Tel Aviv', 'logo': 'm.png'}]
+
+        with patch.object(data_service, 'search_teams', return_value=mock_teams):
+            response = client.get("/api/teams?q=Maccabi")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data) == 1
+            data_service.search_teams.assert_called_once_with('Maccabi', season_id=None)
+
+    def test_teams_search_with_season(self):
+        """Q + season, calls search_teams with season_id."""
+        mock_teams = [{'id': 't1', 'name': 'Hapoel', 'logo': 'h.png'}]
+
+        with patch.object(data_service, 'search_teams', return_value=mock_teams):
+            response = client.get("/api/teams?q=Hapoel&season=s2023")
+
+            assert response.status_code == 200
+            data_service.search_teams.assert_called_once_with('Hapoel', season_id='s2023')
+
+    def test_teams_all_with_season(self):
+        """Season only, calls get_teams with season_id."""
+        mock_teams = [
+            {'id': 't1', 'name': 'Team A', 'logo': 'a.png'},
+            {'id': 't2', 'name': 'Team B', 'logo': 'b.png'}
+        ]
+
+        with patch.object(data_service, 'get_teams', return_value=mock_teams):
+            response = client.get("/api/teams?season=s2024")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data) == 2
+            data_service.get_teams.assert_called_once_with(season_id='s2024')
+
+    def test_teams_service_error(self):
+        """Service throws exception returns 500."""
+        with patch.object(data_service, 'get_teams', side_effect=Exception("Teams query error")):
+            response = client.get("/api/teams")
+
+            assert response.status_code == 500
+            assert "Teams query error" in response.json()["detail"]
+
+
+class TestCalendarUrlPlayerMode:
+    """Tests for calendar URL endpoint with player mode parameters."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_calendar_url_fan_mode_default(self):
+        """No mode param (fan default) - no mode/prep/tf/tz in ICS URL params."""
+        response = client.get("/api/calendar-url?season=s1&group_id=g1")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Should have season and group_id
+        assert 'season=s1' in data['ics_url']
+        assert 'group_id=g1' in data['ics_url']
+
+        # Should NOT have player mode params
+        assert 'mode=' not in data['ics_url']
+        assert 'prep=' not in data['ics_url']
+        assert 'tf=' not in data['ics_url']
+
+    def test_calendar_url_player_mode(self):
+        """Mode=player includes mode, prep, tf, tz in URL params."""
+        response = client.get("/api/calendar-url?mode=player&prep=90&tf=12h&tz=Europe/London")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # All player mode params should be in the URL
+        assert 'mode=player' in data['ics_url']
+        assert 'prep=90' in data['ics_url']
+        assert 'tf=12h' in data['ics_url']
+        assert 'tz=Europe' in data['ics_url']  # URL-encoded timezone
+
+    def test_calendar_url_custom_headers(self):
+        """X-Forwarded-Proto and X-Forwarded-Host used in URL construction."""
+        response = client.get(
+            "/api/calendar-url",
+            headers={
+                "X-Forwarded-Proto": "https",
+                "X-Forwarded-Host": "example.com"
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Should use forwarded headers
+        assert data['ics_url'].startswith("https://example.com/calendar.ics")
+        assert data['webcal_url'].startswith("webcal://example.com/calendar.ics")
+
+    def test_calendar_url_all_params(self):
+        """Season + group_id + team_id + mode=player + custom prep/tf/tz."""
+        response = client.get("/api/calendar-url?season=s2024&group_id=g100&team_id=t200&mode=player&prep=120&tf=12h&tz=America/New_York")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # All params should be included
+        assert 'season=s2024' in data['ics_url']
+        assert 'group_id=g100' in data['ics_url']
+        assert 'team_id=t200' in data['ics_url']
+        assert 'mode=player' in data['ics_url']
+        assert 'prep=120' in data['ics_url']
+        assert 'tf=12h' in data['ics_url']
+        assert 'tz=America' in data['ics_url']
+
+
+class TestCalendarIcsEndpoint:
+    """Tests for calendar.ics endpoint with mode/time format validation."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_calendar_ics_fan_mode(self):
+        """Default mode, verify generate_ics called with player_mode=False."""
+        sample_matches = [{
+            'id': 'm1',
+            'date': '2024-10-15T18:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }]
+
+        with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
+            with patch.object(calendar_service, 'generate_ics', return_value='BEGIN:VCALENDAR\nEND:VCALENDAR') as mock_gen:
+                response = client.get("/calendar.ics")
+
+                assert response.status_code == 200
+                # Verify generate_ics called with player_mode=False
+                mock_gen.assert_called_once()
+                call_args = mock_gen.call_args
+                assert call_args[1]['player_mode'] is False
+                assert call_args[1]['prep_time_minutes'] == 0
+
+    def test_calendar_ics_player_mode(self):
+        """Mode=player, verify generate_ics called with player_mode=True, prep_time_minutes, time_format, display_timezone."""
+        sample_matches = [{
+            'id': 'm1',
+            'date': '2024-10-15T18:00:00Z',
+            'homeTeam': {'id': 't1', 'name': 'Team A'},
+            'awayTeam': {'id': 't2', 'name': 'Team B'},
+            'court': {}
+        }]
+
+        with patch.object(data_service, 'get_all_matches', return_value=sample_matches):
+            with patch.object(calendar_service, 'generate_ics', return_value='BEGIN:VCALENDAR\nEND:VCALENDAR') as mock_gen:
+                response = client.get("/calendar.ics?mode=player&prep=90&tf=12h&tz=Europe/Paris")
+
+                assert response.status_code == 200
+                # Verify generate_ics called with player mode params
+                call_args = mock_gen.call_args
+                assert call_args[1]['player_mode'] is True
+                assert call_args[1]['prep_time_minutes'] == 90
+                assert call_args[1]['time_format'] == '12h'
+                assert call_args[1]['display_timezone'] == 'Europe/Paris'
+
+    def test_calendar_ics_invalid_mode_defaults(self):
+        """Mode=invalid defaults to 'fan'."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            with patch.object(calendar_service, 'generate_ics', return_value='BEGIN:VCALENDAR\nEND:VCALENDAR') as mock_gen:
+                response = client.get("/calendar.ics?mode=invalid")
+
+                assert response.status_code == 200
+                # Should default to fan mode
+                call_args = mock_gen.call_args
+                assert call_args[1]['player_mode'] is False
+
+    def test_calendar_ics_invalid_tf_defaults(self):
+        """Tf=invalid defaults to '24h'."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            with patch.object(calendar_service, 'generate_ics', return_value='BEGIN:VCALENDAR\nEND:VCALENDAR') as mock_gen:
+                response = client.get("/calendar.ics?mode=player&prep=60&tf=invalid")
+
+                assert response.status_code == 200
+                # Should default to 24h
+                call_args = mock_gen.call_args
+                assert call_args[1]['time_format'] == '24h'
+
+    def test_calendar_ics_content_type(self):
+        """Response has text/calendar content-type."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            with patch.object(calendar_service, 'generate_ics', return_value='BEGIN:VCALENDAR\nEND:VCALENDAR'):
+                response = client.get("/calendar.ics")
+
+                assert response.status_code == 200
+                assert 'text/calendar' in response.headers['content-type']
+
+    def test_calendar_ics_cache_control(self):
+        """Response has Cache-Control header."""
+        with patch.object(data_service, 'get_all_matches', return_value=[]):
+            with patch.object(calendar_service, 'generate_ics', return_value='BEGIN:VCALENDAR\nEND:VCALENDAR'):
+                response = client.get("/calendar.ics")
+
+                assert response.status_code == 200
+                assert 'cache-control' in response.headers
+                assert 'max-age=900' in response.headers['cache-control']
+
+
+class TestRefreshStatusEndpoint:
+    """Tests for GET /api/refresh-status endpoint."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_refresh_status_not_scraping(self):
+        """Returns is_scraping=False, cache info, last_error=None."""
+        mock_cache = {
+            'exists': True,
+            'stale': False,
+            'last_updated': '2024-10-15T12:00:00Z'
+        }
+
+        with patch.object(data_service, 'is_scraping', return_value=False):
+            with patch.object(data_service, 'get_cache_info', return_value=mock_cache):
+                with patch.object(data_service, 'get_last_scrape_error', return_value=None):
+                    response = client.get("/api/refresh-status")
+
+                    assert response.status_code == 200
+                    data = response.json()
+                    assert data['is_scraping'] is False
+                    assert data['cache']['exists'] is True
+                    assert data['last_error'] is None
+
+    def test_refresh_status_during_scrape(self):
+        """Is_scraping=True returned."""
+        mock_cache = {'exists': True, 'stale': True}
+
+        with patch.object(data_service, 'is_scraping', return_value=True):
+            with patch.object(data_service, 'get_cache_info', return_value=mock_cache):
+                with patch.object(data_service, 'get_last_scrape_error', return_value=None):
+                    response = client.get("/api/refresh-status")
+
+                    assert response.status_code == 200
+                    data = response.json()
+                    assert data['is_scraping'] is True
+
+
+class TestHealthEndpoint:
+    """Tests for GET /health endpoint with detailed validation."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+
+    def test_health_full_response(self):
+        """Verify status, is_scraping, cache, database_size_mb fields."""
+        mock_cache = {
+            'exists': True,
+            'stale': False,
+            'last_updated': '2024-10-15T10:00:00Z',
+            'stats': {'seasons': 2}
+        }
+
+        with patch.object(data_service, 'get_cache_info', return_value=mock_cache):
+            with patch.object(data_service, 'is_scraping', return_value=False):
+                with patch.object(data_service.db, 'get_database_size', return_value=5242880):  # 5 MB
+                    response = client.get("/health")
+
+                    assert response.status_code == 200
+                    data = response.json()
+
+                    # Verify all required fields
+                    assert data['status'] == 'ok'
+                    assert 'is_scraping' in data
+                    assert data['is_scraping'] is False
+                    assert 'cache' in data
+                    assert data['cache']['exists'] is True
+                    assert 'database_size_mb' in data
+                    assert data['database_size_mb'] == 5.0
+
+    def test_health_with_scraping(self):
+        """During scrape, is_scraping=True in response."""
+        mock_cache = {'exists': True, 'stale': True}
+
+        with patch.object(data_service, 'get_cache_info', return_value=mock_cache):
+            with patch.object(data_service, 'is_scraping', return_value=True):
+                with patch.object(data_service.db, 'get_database_size', return_value=1024000):
+                    response = client.get("/health")
+
+                    assert response.status_code == 200
+                    data = response.json()
+                    assert data['is_scraping'] is True
+
+
+class TestRefreshScenarios:
+    """Tests for POST /api/refresh endpoint scenarios."""
+
+    def setup_method(self):
+        """Reset state before each test."""
+        reset_database()
+        refresh_rate_limiter.reset()
+
+    def teardown_method(self):
+        """Clean up after test."""
+        reset_database()
+        refresh_rate_limiter.reset()
+
+    def test_refresh_already_scraping(self):
+        """Is_scraping=True returns status=in_progress."""
+        with patch.object(data_service, 'is_scraping', return_value=True):
+            response = client.post("/api/refresh")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data['status'] == 'in_progress'
+            assert 'already in progress' in data['message'].lower()
+
+    def test_refresh_rate_limited(self):
+        """Second call within cooldown returns status=rate_limited with retry_after."""
+        with patch.object(data_service, 'is_scraping', return_value=False):
+            with patch.object(data_service, 'refresh_async', return_value=True):
+                # First request - should succeed
+                response1 = client.post("/api/refresh")
+                assert response1.status_code == 200
+                assert response1.json()['status'] == 'started'
+
+                # Second request immediately - should be rate limited
+                response2 = client.post("/api/refresh")
+                assert response2.status_code == 200
+                data = response2.json()
+                assert data['status'] == 'rate_limited'
+                assert 'retry_after' in data
+                assert data['retry_after'] > 0
+                assert data['retry_after'] <= config.REFRESH_COOLDOWN_SECONDS
 
 
 class TestCORS:
