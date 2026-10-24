@@ -19,6 +19,9 @@ supabase>=2.0.0
 # Browser Automation (for scraping)
 playwright>=1.40.0
 
+# HTTP Client - used directly by the scraper for all NBN23 API calls
+requests>=2.31.0
+
 # HTTP Client (backup)
 httpx>=0.25.0
 
