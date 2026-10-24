@@ -65,6 +65,16 @@ CACHE_DIR = (
 SCRAPER_HEADLESS = _get_bool('SCRAPER_HEADLESS', True)
 WIDGET_URL = _get_str('WIDGET_URL', 'https://ibasketball.co.il/swish/')
 
+# Authorization key for api.swish.nbn23.com.
+#
+# The widget page publishes this key inline in its swish_widget_app.init({...})
+# call, so it is a static public credential rather than a session token. Using
+# it directly skips loading the widget page, which sits behind Cloudflare and
+# blocks datacenter IPs such as Render's.
+#
+# Set to an empty string to force browser-based extraction instead.
+NBN23_API_KEY = _get_str('NBN23_API_KEY', 'a9e614ba-34ca-4944-b053-aac6b27389f7')
+
 # =============================================================================
 # RATE LIMITING
 # =============================================================================

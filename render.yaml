@@ -30,6 +30,10 @@ services:
       # Scraper settings
       - key: SCRAPER_HEADLESS
         value: "true"
+      # Published by the widget page; avoids loading that
+      # Cloudflare-protected page from a datacenter IP.
+      - key: NBN23_API_KEY
+        value: "a9e614ba-34ca-4944-b053-aac6b27389f7"
       - key: CACHE_TTL_MINUTES
         value: "10080"  # 7 days
       - key: REFRESH_COOLDOWN_SECONDS
