@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Optional, Union, Dict, List, Any, TYPE_CHECKING
 import time
 
+from .. import config
+
 if TYPE_CHECKING:
     from ..storage.base import DatabaseInterface
 
@@ -50,18 +52,34 @@ class NBN23Scraper:
         self,
         headless: bool = True,
         cache_dir: str = "cache",
-        database: Optional["DatabaseInterface"] = None
+        database: Optional["DatabaseInterface"] = None,
+        api_key: Optional[str] = None
     ):
+        """
+        Args:
+            headless: Run the fallback browser headless
+            cache_dir: Directory for local cache files
+            database: Storage backend to write scraped data into
+            api_key: Authorization key for the API. Defaults to the configured
+                key; pass an empty string to force browser-based extraction.
+        """
         self.headless = headless
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
         self.token: Optional[str] = None
         self.session: Optional[requests.Session] = None
         self.db = database
+        self.api_key = config.NBN23_API_KEY if api_key is None else api_key
 
     def _extract_token(self) -> str:
         """
-        Extract the API authorization token by intercepting widget requests.
+        Obtain the API authorization token.
+
+        Prefers the configured key, which avoids loading the widget page
+        entirely. That page is served through Cloudflare and challenges
+        datacenter IPs, so browser extraction cannot be relied on from a
+        hosted environment. Falls back to intercepting widget requests when
+        no key is configured.
 
         Returns:
             The authorization token string
@@ -69,6 +87,11 @@ class NBN23Scraper:
         Raises:
             RuntimeError: If token extraction fails
         """
+        if self.api_key:
+            print(f"[*] Using configured API key: {self.api_key[:20]}...")
+            self.token = self.api_key
+            return self.api_key
+
         print("[*] Extracting API token from widget...")
         token = None
         page_error = None
@@ -235,7 +258,11 @@ class NBN23Scraper:
 
             # Handle token expiration
             if response.status_code == 401 and retry:
-                print("[!] Token expired (401), re-extracting...")
+                print("[!] Token rejected (401), re-extracting...")
+                # Drop the configured key too: if it was rotated upstream,
+                # reusing it would just fail again, so fall back to the
+                # browser to pick up whatever the widget is using now.
+                self.api_key = None
                 self.token = None
                 self.session = None
                 self._init_session()

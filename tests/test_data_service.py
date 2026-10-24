@@ -247,28 +247,63 @@ class TestDataServiceScrapingState:
 
     def test_refresh_async_starts_background_thread(self, test_data_dir, db_fixture, mock_scraper):
         """Background refresh starts."""
+        import threading
+
+        # Hold the scrape open so the in-progress state is observable; a mocked
+        # scrape otherwise finishes before the assertion and the test is racy.
+        release = threading.Event()
+        started_scraping = threading.Event()
+
+        def blocking_scrape(*args, **kwargs):
+            started_scraping.set()
+            release.wait(timeout=5)
+            return {'seasons': 0, 'groups': 0, 'matches': 0, 'elapsed': 0.0}
+
+        mock_scraper.scrape.side_effect = blocking_scrape
+
         with patch('src.services.data_service.get_database', return_value=db_fixture):
             service = DataService(cache_dir=test_data_dir)
             service._scraper = mock_scraper
 
             started = service.refresh_async()
-
-            assert started is True
-            assert service.is_scraping() is True
+            try:
+                assert started is True
+                assert started_scraping.wait(timeout=5), "scrape thread never ran"
+                assert service.is_scraping() is True
+            finally:
+                release.set()
 
     def test_refresh_async_returns_false_when_already_scraping(self, test_data_dir, db_fixture, mock_scraper):
         """Prevents duplicate scrapes."""
+        import threading
+
+        # Keep the first scrape in flight; otherwise it can finish before the
+        # second call and the duplicate would legitimately be allowed.
+        release = threading.Event()
+        started_scraping = threading.Event()
+
+        def blocking_scrape(*args, **kwargs):
+            started_scraping.set()
+            release.wait(timeout=5)
+            return {'seasons': 0, 'groups': 0, 'matches': 0, 'elapsed': 0.0}
+
+        mock_scraper.scrape.side_effect = blocking_scrape
+
         with patch('src.services.data_service.get_database', return_value=db_fixture):
             service = DataService(cache_dir=test_data_dir)
             service._scraper = mock_scraper
 
             # Start first scrape
             started1 = service.refresh_async()
-            assert started1 is True
+            try:
+                assert started1 is True
+                assert started_scraping.wait(timeout=5), "scrape thread never ran"
 
-            # Try to start another
-            started2 = service.refresh_async()
-            assert started2 is False
+                # Try to start another while the first is still running
+                started2 = service.refresh_async()
+                assert started2 is False
+            finally:
+                release.set()
 
     def test_last_scrape_error_tracking(self, test_data_dir):
         """Error tracking works."""

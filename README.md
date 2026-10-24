@@ -28,20 +28,24 @@ A web application that provides subscribable ICS calendars for Israeli basketbal
 └─────────────────────┘                           └─────────────────────┘
 ```
 
-The NBN23 API requires browser-based authentication, so we use Playwright to:
-1. Load the ibasketball.co.il widget page
-2. Simulate user interaction (mouse movement, scroll, keypress) so the widget script actually loads
-3. Intercept API requests to capture the authorization token
-4. Use the token to directly call the API for all seasons, competitions, and calendars
-5. Store data in SQLite database with indexed queries (108,000+ matches across 1,500+ groups)
-6. Serve ICS calendars with fast filtered queries
+The API needs an authorization key, which the widget page publishes in plain text. The scraper:
+1. Reads the key from `NBN23_API_KEY` (no browser involved)
+2. Calls the API directly for all seasons, competitions, and calendars
+3. Stores data in SQLite database with indexed queries (108,000+ matches across 1,500+ groups)
+4. Serves ICS calendars with fast filtered queries
 
-**Why step 2 matters:** the host site defers the widget with LiteSpeed Cache
-(`<script type="litespeed/javascript" data-src="...">`). Browsers don't execute an unknown
-MIME type, and LiteSpeed only swaps in the real script after a genuine user interaction.
-Without simulated interaction the widget never boots, no API request is ever made, and
-token extraction fails. As a fallback the scraper reads the widget's static `apiKey`
-directly from the inline `swish_widget_app.init({...})` call in the page HTML.
+**Why the key is configured rather than scraped:** `ibasketball.co.il` sits behind Cloudflare,
+which challenges datacenter IPs, so loading the widget page fails from hosted environments
+like Render even though it works from a normal connection. The API itself
+(`api.swish.nbn23.com`) has no such protection. Since the key is a static value the widget
+publishes inline in its `swish_widget_app.init({...})` call, reading it from config removes
+the browser from the critical path entirely.
+
+Browser extraction via Playwright remains as a fallback when `NBN23_API_KEY` is empty, or
+when the configured key is rejected with a 401 (i.e. it was rotated upstream). That path
+simulates user interaction, because the host defers the widget script with LiteSpeed Cache
+(`<script type="litespeed/javascript" data-src="...">`) and only swaps in the real script
+after genuine interaction.
 
 ## Quick Start
 
@@ -344,6 +348,9 @@ DATA_DIR=/data
 SCRAPER_HEADLESS=true
 WIDGET_URL=https://ibasketball.co.il/swish/
 
+# API key; leave empty to force browser-based token extraction
+NBN23_API_KEY=a9e614ba-34ca-4944-b053-aac6b27389f7
+
 # Cache Settings
 # How long before cache is considered stale (in minutes)
 # Default: 7 days (10080 minutes)
@@ -368,7 +375,8 @@ LOG_LEVEL=INFO
 | `DATA_DIR` | Directory for SQLite database | `cache/` (local) or `/app/cache` (container) |
 | `RAILWAY_VOLUME_MOUNT_PATH` | Auto-set by Railway for volume mount | - |
 | `SCRAPER_HEADLESS` | Run browser in headless mode | `true` |
-| `WIDGET_URL` | NBN23 widget URL for token extraction | `https://ibasketball.co.il/swish/` |
+| `WIDGET_URL` | NBN23 widget URL for token extraction (fallback only) | `https://ibasketball.co.il/swish/` |
+| `NBN23_API_KEY` | API authorization key; empty forces browser extraction | `a9e614ba-...` |
 | `CACHE_TTL_MINUTES` | Cache time-to-live before considered stale | `10080` (7 days) |
 | `REFRESH_COOLDOWN_SECONDS` | Rate limit cooldown for manual refresh | `300` (5 minutes) |
 | `LOG_LEVEL` | Logging level | `INFO` |
