@@ -47,6 +47,80 @@ class TestScraperInit:
         assert scraper.cache_dir == cache_path
 
 
+class TestConfiguredApiKey:
+    """Tests for using the configured API key instead of the browser."""
+
+    def test_configured_key_skips_browser(self, test_data_dir):
+        """A configured key is used directly, without launching Playwright."""
+        with patch('src.scraper.nbn23_scraper.sync_playwright') as mock_pw:
+            scraper = NBN23Scraper(cache_dir=test_data_dir, api_key='configured-key')
+            token = scraper._extract_token()
+
+        assert token == 'configured-key'
+        assert scraper.token == 'configured-key'
+        mock_pw.assert_not_called()
+
+    def test_empty_key_falls_back_to_browser(self, test_data_dir):
+        """An empty key forces browser-based extraction."""
+        with patch.object(
+            NBN23Scraper, '_wake_deferred_scripts', return_value=None
+        ), patch('src.scraper.nbn23_scraper.sync_playwright') as mock_pw:
+            mock_page = MagicMock()
+            mock_ctx = MagicMock()
+            mock_browser = MagicMock()
+            mock_p = MagicMock()
+            mock_p.chromium.launch.return_value = mock_browser
+            mock_browser.new_context.return_value = mock_ctx
+            mock_ctx.new_page.return_value = mock_page
+            mock_pw.return_value.__enter__.return_value = mock_p
+            mock_pw.return_value.__exit__.return_value = None
+            mock_page.content.return_value = '<script>apiKey:"from-page"</script>'
+
+            scraper = NBN23Scraper(cache_dir=test_data_dir, api_key='')
+            token = scraper._extract_token()
+
+        assert mock_pw.called, "expected the browser to be used when no key is configured"
+        assert token == 'from-page'
+
+    def test_defaults_to_config_key(self, test_data_dir):
+        """With no explicit key the scraper picks up the configured default."""
+        with patch('src.scraper.nbn23_scraper.config') as mock_config:
+            mock_config.NBN23_API_KEY = 'key-from-config'
+            scraper = NBN23Scraper(cache_dir=test_data_dir)
+
+        assert scraper.api_key == 'key-from-config'
+
+    def test_401_clears_configured_key_for_browser_fallback(self, test_data_dir):
+        """
+        A rotated key must not be retried forever: 401 drops the configured
+        key so the retry falls back to browser extraction.
+        """
+        scraper = NBN23Scraper(cache_dir=test_data_dir, api_key='stale-key')
+        scraper.token = 'stale-key'
+
+        mock_401 = Mock()
+        mock_401.status_code = 401
+        mock_401.headers = {}
+
+        mock_200 = Mock()
+        mock_200.status_code = 200
+        mock_200.headers = {}
+        mock_200.json.return_value = [{'_id': 's1'}]
+
+        mock_session = Mock(spec=requests.Session)
+        mock_session.get.side_effect = [mock_401, mock_200]
+        scraper.session = mock_session
+
+        def fake_init_session():
+            scraper.session = mock_session
+
+        with patch.object(scraper, '_init_session', side_effect=fake_init_session):
+            result = scraper._api_request("seasons", retry=True)
+
+        assert scraper.api_key is None, "stale key must be cleared so the browser is used"
+        assert result == [{'_id': 's1'}]
+
+
 class TestTokenExtraction:
     """Tests for token extraction from widget."""
 
@@ -79,7 +153,7 @@ class TestTokenExtraction:
 
         mock_page.route = capture_route_handler
 
-        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir)
+        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir, api_key='')
 
         # Patch the page.goto and wait_for_timeout methods
         mock_page.goto = MagicMock()
@@ -127,7 +201,7 @@ class TestTokenExtraction:
         mock_page.goto = MagicMock()
         mock_page.wait_for_timeout = MagicMock()
 
-        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir)
+        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir, api_key='')
 
         with pytest.raises(RuntimeError, match="Failed to extract API token"):
             scraper._extract_token()
@@ -170,7 +244,7 @@ class TestTokenExtraction:
         mock_page.goto = goto_with_error
         mock_page.wait_for_timeout = MagicMock()
 
-        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir)
+        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir, api_key='')
 
         # Should succeed because token was captured before error
         token = scraper._extract_token()
@@ -197,7 +271,7 @@ class TestTokenExtraction:
         mock_page.goto = MagicMock(side_effect=Exception("Connection timeout"))
         mock_page.wait_for_timeout = MagicMock()
 
-        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir)
+        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir, api_key='')
 
         with pytest.raises(RuntimeError, match="Failed to extract API token.*Connection timeout"):
             scraper._extract_token()
@@ -207,7 +281,7 @@ class TestTokenExtraction:
         """Raises RuntimeError when playwright crashes."""
         mock_playwright.return_value.__enter__.side_effect = Exception("Playwright initialization failed")
 
-        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir)
+        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir, api_key='')
 
         with pytest.raises(RuntimeError, match="Playwright error"):
             scraper._extract_token()
@@ -252,7 +326,7 @@ class TestTokenExtraction:
 
         mock_page.mouse.move.side_effect = on_interaction
 
-        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir)
+        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir, api_key='')
         token = scraper._extract_token()
 
         assert mock_page.mouse.move.called, "expected mouse movement to wake deferred scripts"
