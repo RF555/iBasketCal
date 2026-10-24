@@ -30,10 +30,18 @@ A web application that provides subscribable ICS calendars for Israeli basketbal
 
 The NBN23 API requires browser-based authentication, so we use Playwright to:
 1. Load the ibasketball.co.il widget page
-2. Intercept API requests to capture the authorization token
-3. Use the token to directly call the API for all seasons, competitions, and calendars
-4. Store data in SQLite database with indexed queries (108,000+ matches across 1,500+ groups)
-5. Serve ICS calendars with fast filtered queries
+2. Simulate user interaction (mouse movement, scroll, keypress) so the widget script actually loads
+3. Intercept API requests to capture the authorization token
+4. Use the token to directly call the API for all seasons, competitions, and calendars
+5. Store data in SQLite database with indexed queries (108,000+ matches across 1,500+ groups)
+6. Serve ICS calendars with fast filtered queries
+
+**Why step 2 matters:** the host site defers the widget with LiteSpeed Cache
+(`<script type="litespeed/javascript" data-src="...">`). Browsers don't execute an unknown
+MIME type, and LiteSpeed only swaps in the real script after a genuine user interaction.
+Without simulated interaction the widget never boots, no API request is ever made, and
+token extraction fails. As a fallback the scraper reads the widget's static `apiKey`
+directly from the inline `swish_widget_app.init({...})` call in the page HTML.
 
 ## Quick Start
 
@@ -409,7 +417,7 @@ PYTHONUNBUFFERED=1
 
 #### Step 3: Initial Data Load
 
-After deployment, visit your app URL - it will auto-detect the empty database and start scraping (~2-3 minutes).
+After deployment, visit your app URL - it will auto-detect the empty database and start scraping (~5 minutes; the API rate-limits requests and the scraper waits out each `Retry-After`).
 
 #### Cost
 
@@ -504,6 +512,21 @@ The scraper captures data for all Israeli basketball competitions including:
 - The widget page may have changed. Try running with `--no-headless` to see what's happening.
 - Check your internet connection.
 
+**"Failed to extract API token from widget"**
+- The widget script is deferred by LiteSpeed Cache and only loads after a user interaction,
+  which the scraper simulates. If this breaks again, re-check how the host emits the script
+  tag — look for `widget-react.js` in the page source and confirm whether it uses `src`
+  or a deferred attribute such as `data-src`.
+- The scraper falls back to the static `apiKey` embedded in the page HTML, so a failure here
+  usually means the page structure itself changed.
+
+**"429 Too Many Requests"**
+- The API rate-limits the per-group calendar/standings calls and responds with a
+  `Retry-After` of roughly 30 seconds.
+- The scraper honours that header and retries with exponential backoff, which is why a full
+  scrape takes several minutes. Don't lower `REQUEST_DELAY_SECONDS` to speed it up — without
+  the delay the API drops whole groups and the scrape silently stores incomplete data.
+
 **"Playwright browser not found"**
 - Run `playwright install chromium` to install the browser.
 - In Docker, ensure browsers are installed as the runtime user (after `USER` directive), not as root.
@@ -557,6 +580,9 @@ The scraper captures data for all Israeli basketball competitions including:
 - Indexed queries for fast filtering by season, competition, and team
 - Rate limiting on refresh endpoint (5-minute cooldown)
 - Frontend request timeouts (30 seconds)
+- Scrapes only active/recent seasons (ended less than 45 days ago) rather than all history
+- Backs off and retries on upstream `429` responses, so a refresh takes ~5 minutes but
+  stores complete data
 
 ## License
 

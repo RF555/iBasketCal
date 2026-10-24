@@ -212,6 +212,52 @@ class TestTokenExtraction:
         with pytest.raises(RuntimeError, match="Playwright error"):
             scraper._extract_token()
 
+    @patch('src.scraper.nbn23_scraper.sync_playwright')
+    def test_user_interaction_dispatched_to_wake_deferred_scripts(
+        self, mock_playwright, test_data_dir
+    ):
+        """
+        The widget host defers its scripts via LiteSpeed Cache
+        (type="litespeed/javascript"), which only swaps in the real script
+        after a user interaction event. Without simulated interaction the
+        widget never boots and no API request is ever made, so extraction
+        must dispatch mouse/scroll/keyboard activity.
+        """
+        mock_page = MagicMock()
+        mock_context = MagicMock()
+        mock_browser = MagicMock()
+        mock_p = MagicMock()
+
+        mock_p.chromium.launch.return_value = mock_browser
+        mock_browser.new_context.return_value = mock_context
+        mock_context.new_page.return_value = mock_page
+        mock_playwright.return_value.__enter__.return_value = mock_p
+        mock_playwright.return_value.__exit__.return_value = None
+
+        captured_handler = None
+
+        def capture_route_handler(pattern, handler):
+            nonlocal captured_handler
+            captured_handler = handler
+
+        mock_page.route = capture_route_handler
+
+        # The widget only issues its API call once interaction occurs.
+        def on_interaction(*args, **kwargs):
+            if captured_handler:
+                captured_handler(
+                    MagicMock(**{'continue_': MagicMock()}),
+                    MagicMock(headers={'authorization': 'Bearer woken_token'})
+                )
+
+        mock_page.mouse.move.side_effect = on_interaction
+
+        scraper = NBN23Scraper(headless=True, cache_dir=test_data_dir)
+        token = scraper._extract_token()
+
+        assert mock_page.mouse.move.called, "expected mouse movement to wake deferred scripts"
+        assert token == 'Bearer woken_token'
+
 
 class TestSessionInit:
     """Tests for session initialization."""
@@ -316,6 +362,54 @@ class TestApiRequest:
                 assert scraper.token == "Bearer new_token"
                 assert result == [{'id': 'data'}]
                 assert mock_session.get.call_count == 2
+
+    def test_429_retries_with_backoff_and_succeeds(self, test_data_dir):
+        """A rate-limited request backs off and retries instead of losing data."""
+        scraper = NBN23Scraper(cache_dir=test_data_dir)
+        scraper.token = "Bearer test_token"
+
+        mock_429 = Mock()
+        mock_429.status_code = 429
+        mock_429.headers = {}
+
+        mock_200 = Mock()
+        mock_200.status_code = 200
+        mock_200.headers = {}
+        mock_200.json.return_value = {'rounds': [{'matches': [{'id': 'm1'}]}]}
+
+        mock_session = Mock(spec=requests.Session)
+        mock_session.get.side_effect = [mock_429, mock_200]
+        scraper.session = mock_session
+
+        with patch('src.scraper.nbn23_scraper.time.sleep') as mock_sleep:
+            result = scraper._api_request("calendar", {"groupId": "g1"})
+
+        assert result == {'rounds': [{'matches': [{'id': 'm1'}]}]}
+        assert mock_session.get.call_count == 2
+        mock_sleep.assert_called()
+
+    def test_429_respects_retry_after_header(self, test_data_dir):
+        """Retry-After header overrides the computed backoff when it is longer."""
+        scraper = NBN23Scraper(cache_dir=test_data_dir)
+        scraper.token = "Bearer test_token"
+
+        mock_429 = Mock()
+        mock_429.status_code = 429
+        mock_429.headers = {'Retry-After': '9'}
+
+        mock_200 = Mock()
+        mock_200.status_code = 200
+        mock_200.headers = {}
+        mock_200.json.return_value = []
+
+        mock_session = Mock(spec=requests.Session)
+        mock_session.get.side_effect = [mock_429, mock_200]
+        scraper.session = mock_session
+
+        with patch('src.scraper.nbn23_scraper.time.sleep') as mock_sleep:
+            scraper._api_request("standings", {"groupId": "g1"})
+
+        assert mock_sleep.call_args[0][0] == 9.0
 
     def test_401_no_retry_when_disabled(self, test_data_dir):
         """401 with retry=False returns empty data."""

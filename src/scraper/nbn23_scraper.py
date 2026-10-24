@@ -10,6 +10,7 @@ Includes automatic token refresh on 401 errors.
 from playwright.sync_api import sync_playwright
 import requests
 import json
+import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Union, Dict, List, Any, TYPE_CHECKING
@@ -32,6 +33,18 @@ class NBN23Scraper:
     WIDGET_URL = "https://ibasketball.co.il/swish/"
     API_BASE = "https://api.swish.nbn23.com"
     ORIGIN = "https://ibasketball.co.il"
+
+    # How long to wait for the widget to issue its first API call after the
+    # simulated interaction, and how often to check.
+    INTERACTION_TIMEOUT_MS = 20000
+    POLL_INTERVAL_MS = 500
+
+    # Backoff applied when the API answers 429; doubles on each attempt.
+    RATE_LIMIT_MAX_RETRIES = 4
+    RATE_LIMIT_BACKOFF_SECONDS = 2.0
+
+    # Pause between per-group requests to stay under the API rate limit.
+    REQUEST_DELAY_SECONDS = 0.25
 
     def __init__(
         self,
@@ -91,7 +104,18 @@ class NBN23Scraper:
                 try:
                     print(f"[*] Loading {self.WIDGET_URL}...")
                     page.goto(self.WIDGET_URL, wait_until='domcontentloaded', timeout=45000)
-                    page.wait_for_timeout(10000)
+
+                    # The host defers the widget script with LiteSpeed Cache
+                    # (type="litespeed/javascript" + data-src). LiteSpeed only
+                    # swaps in the real <script> after a genuine user
+                    # interaction, so without this the widget never boots and
+                    # no API request is ever made.
+                    self._wake_deferred_scripts(page, lambda: token)
+
+                    # Fall back to the widget's static apiKey, which the page
+                    # embeds inline in its swish_widget_app.init(...) call.
+                    if not token:
+                        token = self._token_from_page_source(page)
                 except Exception as e:
                     page_error = str(e)
                     print(f"[!] Page load error: {e}")
@@ -112,6 +136,66 @@ class NBN23Scraper:
 
         self.token = token
         return token
+
+    def _wake_deferred_scripts(self, page, get_token):
+        """
+        Simulate user interaction so LiteSpeed Cache loads the deferred widget
+        script, then poll until the widget issues its first API request.
+
+        Args:
+            page: Playwright page already navigated to the widget URL
+            get_token: Callable returning the token captured so far (or None)
+
+        Returns:
+            The captured token, or None if the widget never called the API.
+        """
+        print("[*] Simulating user interaction to load deferred widget...")
+        page.mouse.move(400, 400)
+        page.mouse.move(650, 520)
+        page.mouse.wheel(0, 600)
+        try:
+            page.keyboard.press('ArrowDown')
+        except Exception:
+            pass  # Keyboard input is best-effort; mouse events usually suffice.
+
+        # Poll instead of sleeping a fixed interval so a fast widget returns
+        # quickly and a slow one still gets the full budget.
+        waited = 0
+        while waited < self.INTERACTION_TIMEOUT_MS:
+            token = get_token()
+            if token:
+                return token
+            page.wait_for_timeout(self.POLL_INTERVAL_MS)
+            waited += self.POLL_INTERVAL_MS
+
+        return get_token()
+
+    def _token_from_page_source(self, page) -> Optional[str]:
+        """
+        Read the widget's API key straight from the page HTML.
+
+        The page bootstraps the widget with an inline
+        swish_widget_app.init({apiKey:"..."}) call, and that key is what the
+        widget sends as its Authorization header. Used as a fallback when the
+        widget fails to boot and issue a request of its own.
+
+        Returns:
+            The API key, or None if it is not present in the page.
+        """
+        try:
+            html = page.content()
+        except Exception as e:
+            print(f"[!] Could not read page content: {e}")
+            return None
+
+        match = re.search(r"""apiKey\s*:\s*["']([^"']+)["']""", html)
+        if match:
+            key = match.group(1)
+            print(f"[+] Token recovered from page source: {key[:20]}...")
+            return key
+
+        print("[!] No apiKey found in page source")
+        return None
 
     def _init_session(self) -> None:
         """Initialize HTTP session with auth headers."""
@@ -156,6 +240,25 @@ class NBN23Scraper:
                 self.session = None
                 self._init_session()
                 return self._api_request(endpoint, params, retry=False)
+
+            # Back off and retry when rate limited, otherwise the caller gets
+            # an empty result and the data for that group is silently lost.
+            if response.status_code == 429:
+                for attempt in range(self.RATE_LIMIT_MAX_RETRIES):
+                    delay = self.RATE_LIMIT_BACKOFF_SECONDS * (2 ** attempt)
+                    retry_after = response.headers.get('Retry-After')
+                    if retry_after:
+                        try:
+                            delay = max(delay, float(retry_after))
+                        except ValueError:
+                            pass
+                    print(f"[!] Rate limited on {endpoint}, waiting {delay:.1f}s "
+                          f"(attempt {attempt + 1}/{self.RATE_LIMIT_MAX_RETRIES})...")
+                    time.sleep(delay)
+
+                    response = self.session.get(url, params=params, timeout=30)
+                    if response.status_code != 429:
+                        break
 
             response.raise_for_status()
             return response.json()
@@ -276,7 +379,7 @@ class NBN23Scraper:
                 self.db.save_standings(group_id, standings)
 
             # Small delay to be nice to the API
-            time.sleep(0.05)
+            time.sleep(self.REQUEST_DELAY_SECONDS)
 
         # Step 5: Update scrape timestamp
         if self.db:
